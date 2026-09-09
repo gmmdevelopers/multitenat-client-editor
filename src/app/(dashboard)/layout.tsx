@@ -1,0 +1,91 @@
+"use client";
+
+import { useAuth } from "@/context/AuthContext";
+import { useRouter, useParams } from "next/navigation";
+import { useEffect } from "react";
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, loading, logout } = useAuth();
+  const router = useRouter();
+  const params = useParams();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+      const activeDomain = params?.domain as string;
+      if (activeDomain && user.tenant.slug !== activeDomain) {
+        router.push(`/site/${user.tenant.slug}/editor`);
+      }
+    }
+  }, [user, loading, router, params]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950 text-white">
+        <span className="animate-pulse">Cargando espacio de trabajo...</span>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  return (
+    <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
+      <aside className="w-64 border-r border-gray-800 bg-gray-950 flex flex-col justify-between p-4">
+        <div>
+          <div className="mb-8 border-b border-gray-800 pb-4">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+              Organización
+            </h2>
+            <p className="text-lg font-bold text-white truncate">
+              {user.tenant.name}
+            </p>
+            <span className="inline-block mt-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+              {user.tenant.slug}.multitenant.com
+            </span>
+          </div>
+
+          <nav className="space-y-1">
+            <a
+              href="/editor"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
+            >
+              Editor
+            </a>
+            <a
+              href="/settings"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
+            >
+              Configuración & Dominio PRO
+            </a>
+          </nav>
+        </div>
+
+        <div className="border-t border-gray-800 pt-4 flex items-center justify-between">
+          <div className="truncate">
+            <p className="text-sm font-medium text-white truncate">
+              {user.fullName}
+            </p>
+            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+          </div>
+          <button
+            onClick={logout}
+            className="text-xs text-red-400 hover:text-red-300 transition"
+          >
+            Salir
+          </button>
+        </div>
+      </aside>
+
+      {/* Canvas / Viewport */}
+      <main className="flex-1 overflow-auto bg-gray-900">{children}</main>
+    </div>
+  );
+}
