@@ -28,12 +28,17 @@ export function proxy(req: NextRequest) {
     .replace(".localhost", "")
     .replace(`.${process.env.NEXT_PUBLIC_APP_DOMAIN}`, "");
 
+  // /preview vive fuera del grupo /site/[slug], asi que queda exenta del
+  // rewrite multi-tenant: si no, en un subdominio se convertiria en
+  // /site/<slug>/preview, que no existe.
+  const isStandaloneRoute = pathname.startsWith("/preview");
+
   const isAuthRoute = PUBLIC_AUTH_ROUTES.some((route) =>
     pathname.startsWith(route),
   );
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    pathname.startsWith(route),
-  );
+  const isProtectedRoute =
+    isStandaloneRoute ||
+    PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
 
   // --- REGLAS DE REDIRECCIÓN Y AUTENTICACIÓN ---
 
@@ -72,7 +77,7 @@ export function proxy(req: NextRequest) {
     pathname.startsWith(route),
   );
 
-  if (!isMainDomain && !isAuthRoute && isPanelRoute) {
+  if (!isMainDomain && !isAuthRoute && !isStandaloneRoute && isPanelRoute) {
     return NextResponse.rewrite(
       new URL(`/site/${currentHost}${pathname}`, req.url),
     );

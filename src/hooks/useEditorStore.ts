@@ -17,7 +17,9 @@ function generateUniqueId(): string {
 interface EditorStore {
   blocks: BlockInstance[];
   selectedBlockId: string | null;
-  loadBlocks: (blocks: BlockInstance[]) => void;
+  /** Pagina que se esta editando; la usa el preview para no mostrar otra. */
+  pageId: string | null;
+  loadBlocks: (blocks: BlockInstance[], pageId?: string | null) => void;
   setSelectedBlockId: (id: string | null) => void;
   addOrganism: (metaName: string) => void;
   updateBlockProp: (blockId: string, propName: string, value: any) => void;
@@ -32,11 +34,13 @@ export const useEditorStore = create<EditorStore>()(
     (set) => ({
       blocks: [],
       selectedBlockId: null,
+      pageId: null,
 
       // Normalizamos lo que llega de la API: un bloque sin `props` es una
       // forma valida en la respuesta pero rompe el panel de propiedades.
-      loadBlocks: (blocks) =>
+      loadBlocks: (blocks, pageId) =>
         set({
+          ...(pageId !== undefined ? { pageId } : {}),
           blocks: (blocks ?? []).map((block) => ({
             ...block,
             props:

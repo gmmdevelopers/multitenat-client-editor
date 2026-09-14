@@ -49,7 +49,7 @@ export default function PageBuilderPage() {
     void getPageForEditor(pageId)
       .then((page) => {
         if (cancelled) return;
-        loadBlocks(page.blocks ?? []);
+        loadBlocks(page.blocks ?? [], page.id);
         setPageTitle(page.title);
         setPagePath(page.path);
         setHasUnpublished(page.hasUnpublishedChanges);
@@ -103,6 +103,16 @@ export default function PageBuilderPage() {
     }
   }
 
+  /**
+   * Abre el borrador en una pestana nueva. No pegamos contra la API: el
+   * preview lee del mismo store persistido, asi que muestra los cambios
+   * sin guardar. La version publicada se ve en la ruta publica del sitio.
+   */
+  function handlePreview() {
+    if (!pageId) return;
+    window.open(`/preview?pageId=${pageId}`, "_blank", "noopener,noreferrer");
+  }
+
   if (isLoadingPage) {
     return (
       <div className="flex h-screen items-center justify-center bg-stone-950 text-white">
@@ -133,6 +143,7 @@ export default function PageBuilderPage() {
         handleZoomOut={handleZoomOut}
         handlePublishPage={handlePublish}
         handleSaveDraft={handleSaveDraft}
+        handlePreview={handlePreview}
       />
 
       <div className="flex items-center justify-between border-b border-stone-800 bg-stone-900/40 px-4 py-2 text-xs text-stone-400">
