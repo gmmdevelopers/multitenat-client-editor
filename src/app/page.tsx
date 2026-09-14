@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { getCurrentSite, getSiteHomePage } from "@/lib/api/sites";
+import { getErrorMessage } from "@/lib/api/errors";
 
 /**
  * Punto de entrada tras el login.
@@ -17,6 +19,7 @@ import { getCurrentSite, getSiteHomePage } from "@/lib/api/sites";
 export default function EntryPointPage() {
   const { user, tenant, loading } = useAuth();
   const router = useRouter();
+  const toast = useToast();
   const hasRouted = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,12 +46,14 @@ export default function EntryPointPage() {
       router.replace(`/site/${tenant.slug}/editor?pageId=${entryPoint.pageId}`);
     })().catch((err) => {
       hasRouted.current = false;
-      const message =
-        err?.response?.data?.message ||
-        "No se pudo cargar el sitio. Intenta nuevamente.";
-      setError(Array.isArray(message) ? message[0] : message);
+      const message = getErrorMessage(
+        err,
+        "No se pudo cargar el sitio. Intenta nuevamente.",
+      );
+      setError(message);
+      toast.error(message);
     });
-  }, [loading, user, tenant, router]);
+  }, [loading, user, tenant, router, toast]);
 
   if (error) {
     return (

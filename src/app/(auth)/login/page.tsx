@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
+import { getErrorMessage } from "@/lib/api/errors";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const toast = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,11 +22,13 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-    } catch (err: any) {
-      const message =
-        err.response?.data?.message ||
-        "Error de autenticación. Verifica tus datos.";
-      setError(Array.isArray(message) ? message[0] : message);
+    } catch (err) {
+      const message = getErrorMessage(
+        err,
+        "Error de autenticación. Verifica tus datos.",
+      );
+      setError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

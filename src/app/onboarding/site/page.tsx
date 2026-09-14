@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { createSite } from "@/lib/api/sites";
+import { getErrorMessage } from "@/lib/api/errors";
 
 /**
  * Onboarding: se muestra cuando el tenant autenticado todavía no tiene site.
@@ -13,6 +15,7 @@ import { createSite } from "@/lib/api/sites";
 export default function CreateSitePage() {
   const { user, tenant, loading } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   const [title, setTitle] = useState("");
   const [domain, setDomain] = useState("");
@@ -33,13 +36,14 @@ export default function CreateSitePage() {
     setIsSubmitting(true);
 
     try {
-      const { site, homePage } = await createSite({ title, domain });
+      const { homePage } = await createSite({ title, domain });
 
+      toast.success("Sitio creado. Ya puedes editar tu home.");
       router.replace(`/site/${tenant.slug}/editor?pageId=${homePage.id}`);
-    } catch (err: any) {
-      const message =
-        err.response?.data?.message || "No se pudo crear el sitio.";
-      setError(Array.isArray(message) ? message[0] : message);
+    } catch (err) {
+      const message = getErrorMessage(err, "No se pudo crear el sitio.");
+      setError(message);
+      toast.error(message);
       setIsSubmitting(false);
     }
   };

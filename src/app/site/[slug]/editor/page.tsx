@@ -8,13 +8,20 @@ import { OrganismTooltipPreview } from "@/components/editor/OrganismTooltipPrevi
 import { useEditorStore } from "@/hooks/useEditorStore";
 import { ORGANISMS_REGISTRY } from "@/lib/editor-registry";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
-import { getPageForEditor, publishPage, saveDraftBlocks } from "@/lib/api/pages";
+import {
+  getPageForEditor,
+  publishPage,
+  saveDraftBlocks,
+} from "@/lib/api/pages";
 import { ViewportMode } from "@/components/editor/ViewportSelector";
+import { useToast } from "@/context/ToastContext";
+import { getErrorMessage } from "@/lib/api/errors";
 
 export default function PageBuilderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pageId = searchParams.get("pageId");
+  const toast = useToast();
 
   const [zoom, setZoom] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,9 +64,9 @@ export default function PageBuilderPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        const message =
-          err?.response?.data?.message || "No se pudo cargar la página.";
-        setLoadError(Array.isArray(message) ? message[0] : message);
+        const message = getErrorMessage(err, "No se pudo cargar la página.");
+        setLoadError(message);
+        toast.error(message);
       })
       .finally(() => {
         if (!cancelled) setIsLoadingPage(false);
@@ -68,7 +75,7 @@ export default function PageBuilderPage() {
     return () => {
       cancelled = true;
     };
-  }, [pageId, router, loadBlocks]);
+  }, [pageId, router, loadBlocks, toast]);
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
 
@@ -82,8 +89,9 @@ export default function PageBuilderPage() {
     try {
       const res = await saveDraftBlocks(pageId, blocks);
       setHasUnpublished(res.hasUnpublishedChanges);
-    } catch {
-      // toast: "Error al guardar"
+      toast.success("Borrador guardado");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "No se pudo guardar el borrador."));
     } finally {
       setIsSaving(false);
     }
@@ -96,8 +104,19 @@ export default function PageBuilderPage() {
       await saveDraftBlocks(pageId, blocks);
       await publishPage(pageId);
       setHasUnpublished(false);
-    } catch {
-      // toast: "Error al publicar"
+      toast.success("Cambios publicados");
+    } catch (err) {
+      // El backend responde 409 cuando no hay cambios sin publicar: es un
+      // caso esperado, no un fallo, asi que se muestra como aviso.
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 409) {
+        toast.info("No hay cambios sin publicar");
+      } else {
+        toast.error(
+          getErrorMessage(err, "No se pudieron publicar los cambios."),
+        );
+      }
     } finally {
       setIsPublishing(false);
     }
@@ -110,7 +129,18 @@ export default function PageBuilderPage() {
    */
   function handlePreview() {
     if (!pageId) return;
-    window.open(`/preview?pageId=${pageId}`, "_blank", "noopener,noreferrer");
+
+    const opened = window.open(
+      `/preview?pageId=${pageId}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    if (!opened) {
+      toast.error(
+        "El navegador bloqueo la pestana. Habilita las ventanas emergentes.",
+      );
+    }
   }
 
   if (isLoadingPage) {

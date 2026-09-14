@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageRenderer } from "@/components/PageRenderer";
 import { useEditorStore } from "@/hooks/useEditorStore";
@@ -15,6 +16,19 @@ import { useEditorStore } from "@/hooks/useEditorStore";
  * si el usuario cambio de pestana despues de abrirla.
  */
 export default function PreviewPage() {
+  // useSearchParams exige un limite de Suspense para poder prerenderizar.
+  return (
+    <Suspense fallback={<PreviewPlaceholder />}>
+      <PreviewContent />
+    </Suspense>
+  );
+}
+
+function PreviewPlaceholder() {
+  return <div className="min-h-screen bg-white" />;
+}
+
+function PreviewContent() {
   const searchParams = useSearchParams();
   const pageId = searchParams.get("pageId");
 
