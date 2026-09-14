@@ -85,8 +85,9 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Canvas / Viewport */}
-      <main className="flex-1 overflow-auto bg-gray-900">{children}</main>
+      {/* Contenedor de la vista: el hijo maneja su propio scroll interno.
+          `min-h-0` evita que un hijo con altura fija desborde el flex. */}
+      <div className="flex min-h-0 flex-1 bg-gray-900">{children}</div>
     </div>
   );
 }

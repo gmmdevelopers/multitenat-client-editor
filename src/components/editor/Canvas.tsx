@@ -57,6 +57,48 @@ function SortableBlock({
     isDragging,
   } = useSortable({ id: block.id });
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Al agregar un organismo queda seleccionado, asi que scrolleamos a el.
+  //
+  // No usamos `scrollIntoView`: el canvas aplica `transform: scale()` para el
+  // zoom y eso rompe el calculo de posicion del navegador. Calculamos el
+  // scroll a mano sobre el contenedor real.
+  //
+  // El efecto no lleva cleanup ni flag de "ya scrolleado": en StrictMode
+  // React monta, desmonta y remonta, y un cleanup cancelando el rAF dejaba
+  // el scroll sin ejecutar. Scroll a la posicion correcta es idempotente, asi
+  // que repetirlo es inofensivo, y solo corre cuando `isSelected` cambia.
+  useEffect(() => {
+    if (!isSelected) return;
+
+    const element = rootRef.current;
+    if (!element) return;
+
+    const frame = requestAnimationFrame(() => {
+      const scroller = element.closest("main");
+      if (!scroller) return;
+
+      const blockRect = element.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+
+      const alreadyVisible =
+        blockRect.top >= scrollerRect.top && blockRect.bottom <= scrollerRect.bottom;
+
+      if (alreadyVisible) return;
+
+      // Centramos el bloque en el viewport del canvas, sin dejar hueco arriba.
+      const target =
+        scroller.scrollTop +
+        (blockRect.top - scrollerRect.top) -
+        (scrollerRect.height - blockRect.height) / 2;
+
+      scroller.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isSelected]);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -70,7 +112,10 @@ function SortableBlock({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        rootRef.current = node;
+      }}
       style={style}
       onClick={() => onSelectBlock(block.id)}
       className={`group relative cursor-pointer rounded-none transition-all ${
@@ -166,7 +211,7 @@ export function Canvas({
   return (
     <main
       ref={containerRef}
-      className="relative flex-1 overflow-auto bg-stone-950 p-8 flex justify-center items-start"
+      className="relative min-h-0 flex-1 overflow-y-auto bg-stone-950 p-8 flex justify-center items-start"
     >
       <div
         style={{

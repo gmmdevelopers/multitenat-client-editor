@@ -194,9 +194,9 @@ export default function PageBuilderPage() {
         </span>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar Izquierdo */}
-        <aside className="w-72 border-r border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
+        <aside className="w-72 shrink-0 border-r border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
           <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-400">
             Agregar Secciones
           </h2>
