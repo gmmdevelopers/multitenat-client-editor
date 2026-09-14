@@ -17,6 +17,7 @@ function generateUniqueId(): string {
 interface EditorStore {
   blocks: BlockInstance[];
   selectedBlockId: string | null;
+  loadBlocks: (blocks: BlockInstance[]) => void;
   setSelectedBlockId: (id: string | null) => void;
   addOrganism: (metaName: string) => void;
   updateBlockProp: (blockId: string, propName: string, value: any) => void;
@@ -31,6 +32,20 @@ export const useEditorStore = create<EditorStore>()(
     (set) => ({
       blocks: [],
       selectedBlockId: null,
+
+      // Normalizamos lo que llega de la API: un bloque sin `props` es una
+      // forma valida en la respuesta pero rompe el panel de propiedades.
+      loadBlocks: (blocks) =>
+        set({
+          blocks: (blocks ?? []).map((block) => ({
+            ...block,
+            props:
+              block.props && typeof block.props === "object"
+                ? block.props
+                : {},
+          })),
+          selectedBlockId: null,
+        }),
 
       setSelectedBlockId: (id) => set({ selectedBlockId: id }),
 

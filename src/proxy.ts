@@ -4,12 +4,13 @@ import type { NextRequest } from "next/server";
 const PUBLIC_AUTH_ROUTES = ["/login", "/register"];
 const PROTECTED_ROUTES = ["/editor", "/settings"];
 
-export function middleware(req: NextRequest) {
-  console.log("middleware init");
-
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hostname = req.headers.get("host") || "";
   const token = req.cookies.get("accessToken")?.value;
+
+  console.log("--> Host de la petición:", req.headers.get("host"));
+  console.log("--> Token detectado en proxy:", token); // llega undefined
 
   // 1. Extraer el host sin el puerto (ej: "salud-bienestar.localhost")
   const hostWithoutPort = hostname.split(":")[0];
@@ -46,11 +47,32 @@ export function middleware(req: NextRequest) {
 
   // Si intenta acceder a /login teniendo ya token
   if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL("/editor", req.url));
+    return NextResponse.redirect(new URL("/", req.url));
   }
 
+  console.log({
+    hostname,
+    hostWithoutPort,
+    isMainDomain,
+    currentHost,
+    NEXT_PUBLIC_APP_DOMAIN: process.env.NEXT_PUBLIC_APP_DOMAIN,
+    rewriteTo: `/site/${currentHost}${pathname}`,
+  });
+
   // --- REESCRITURA DE RUTA MULTI-TENANT ---
-  if (!isMainDomain) {
+  //
+  // El grupo /site/[slug] NO es la web pública del tenant: es el panel del
+  // editor. Si reescribimos la raiz "/" a /site/<slug>/ caemos en una ruta
+  // inexistente (solo existe /site/[slug]/editor y /settings) y el usuario
+  // ve un 404 justo despues del login.
+  //
+  // Por eso solo reescribimos rutas que realmente cuelgan del panel.
+  const PANEL_ROUTE_PREFIXES = ["/editor", "/settings"];
+  const isPanelRoute = PANEL_ROUTE_PREFIXES.some((route) =>
+    pathname.startsWith(route),
+  );
+
+  if (!isMainDomain && !isAuthRoute && isPanelRoute) {
     return NextResponse.rewrite(
       new URL(`/site/${currentHost}${pathname}`, req.url),
     );

@@ -9,22 +9,26 @@ export default function ProtectedRoute({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  const { user, tenant, loading } = useAuth();
   const router = useRouter();
   const params = useParams();
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    if (loading) return;
 
-      if (params?.tenantSlug && user.tenant.slug !== params.tenantSlug) {
-        router.push(`/editor`);
-      }
+    if (!user || !tenant) {
+      router.push("/login");
+      return;
     }
-  }, [user, loading, router, params]);
+
+    const activeSlug = (params?.slug ?? params?.tenantSlug) as
+      | string
+      | undefined;
+
+    if (activeSlug && tenant.slug !== activeSlug) {
+      router.push(`/site/${tenant.slug}/editor`);
+    }
+  }, [user, tenant, loading, router, params]);
 
   if (loading || !user) {
     return (

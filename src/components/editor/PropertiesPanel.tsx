@@ -21,6 +21,11 @@ interface PropertiesPanelProps {
   onUpdateProp: (blockId: string, propName: string, value: any) => void;
 }
 
+/** Un bloque puede llegar de la API sin `props`; nunca asumimos su forma. */
+function safeProps(block: BlockInstance): Record<string, any> {
+  return block.props && typeof block.props === "object" ? block.props : {};
+}
+
 const POPULAR_ICONS = [
   "Heart",
   "Star",
@@ -88,6 +93,7 @@ export function PropertiesPanel({
   }
 
   const registryEntry = ORGANISMS_MAP.get(selectedBlock.metaName);
+  const props = safeProps(selectedBlock);
 
   const toggleListCollapse = (propName: string) => {
     setCollapsedLists((prev) => ({
@@ -102,7 +108,7 @@ export function PropertiesPanel({
     itemKey: string,
     value: any,
   ) => {
-    const currentArray = [...(selectedBlock.props[propName] || [])];
+    const currentArray = [...(props[propName] || [])];
     if (
       typeof currentArray[index] === "object" &&
       currentArray[index] !== null
@@ -118,7 +124,7 @@ export function PropertiesPanel({
   };
 
   const handleAddArrayItem = (propName: string) => {
-    const currentArray = [...(selectedBlock.props[propName] || [])];
+    const currentArray = [...(props[propName] || [])];
     const templateItem =
       currentArray.length > 0 && typeof currentArray[0] === "object"
         ? Object.keys(currentArray[0]).reduce(
@@ -138,7 +144,7 @@ export function PropertiesPanel({
   };
 
   const handleRemoveArrayItem = (propName: string, index: number) => {
-    const currentArray = [...(selectedBlock.props[propName] || [])];
+    const currentArray = [...(props[propName] || [])];
     currentArray.splice(index, 1);
     onUpdateProp(selectedBlock.id, propName, currentArray);
   };
@@ -344,7 +350,7 @@ export function PropertiesPanel({
       </div>
 
       <div className="flex flex-col gap-5">
-        {Object.entries(selectedBlock.props).map(([propName, propValue]) => {
+        {Object.entries(props).map(([propName, propValue]) => {
           if (Array.isArray(propValue)) {
             const isCollapsed = !!collapsedLists[propName];
 

@@ -9,22 +9,23 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, logout } = useAuth();
+  const { user, tenant, loading, logout } = useAuth();
   const router = useRouter();
   const params = useParams();
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-      const activeDomain = params?.domain as string;
-      if (activeDomain && user.tenant.slug !== activeDomain) {
-        router.push(`/site/${user.tenant.slug}/editor`);
-      }
+    if (loading) return;
+
+    if (!user || !tenant) {
+      router.replace("/login");
+      return;
     }
-  }, [user, loading, router, params]);
+
+    const activeSlug = params?.slug as string;
+    if (activeSlug && tenant.slug !== activeSlug) {
+      router.replace(`/site/${tenant.slug}/editor`);
+    }
+  }, [user, tenant, loading, router, params]);
 
   if (loading) {
     return (
@@ -34,7 +35,7 @@ export default function DashboardLayout({
     );
   }
 
-  if (!user) return null;
+  if (!user || !tenant) return null;
 
   return (
     <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
@@ -45,22 +46,22 @@ export default function DashboardLayout({
               Organización
             </h2>
             <p className="text-lg font-bold text-white truncate">
-              {user.tenant.name}
+              {tenant.name}
             </p>
             <span className="inline-block mt-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
-              {user.tenant.slug}.multitenant.com
+              {tenant.slug}.multitenant.com
             </span>
           </div>
 
           <nav className="space-y-1">
             <a
-              href="/editor"
+              href={`/site/${tenant.slug}/editor`}
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
             >
               Editor
             </a>
             <a
-              href="/settings"
+              href={`/site/${tenant.slug}/settings`}
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
             >
               Configuración & Dominio PRO
