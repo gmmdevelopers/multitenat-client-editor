@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageRenderer } from "@/components/PageRenderer";
 import { useEditorStore } from "@/hooks/useEditorStore";
@@ -33,6 +33,19 @@ function PreviewContent() {
   const pageId = searchParams.get("pageId");
 
   const { blocks, pageId: storePageId } = useEditorStore();
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // El store arranca vacio (skipHydration) y se rellena desde localStorage.
+  // Esperamos a esa rehidratacion para no pintar un preview en blanco.
+  useEffect(() => {
+    void Promise.resolve(useEditorStore.persist.rehydrate()).finally(() =>
+      setIsHydrated(true),
+    );
+  }, []);
+
+  if (!isHydrated) {
+    return <PreviewPlaceholder />;
+  }
 
   if (pageId && storePageId && pageId !== storePageId) {
     return (

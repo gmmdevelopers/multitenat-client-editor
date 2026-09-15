@@ -149,7 +149,26 @@ export function PropertiesPanel({
     onUpdateProp(selectedBlock.id, propName, currentArray);
   };
 
+  /**
+   * Envuelve el contenido de un campo con una `key` unica.
+   *
+   * `renderFieldContent` devuelve un elemento suelto y se invoca en bucles
+   * (props del bloque, items de un array, sub-campos de un item), asi que
+   * cada llamada necesita su propia key para que React no avise por listas
+   * sin key estable.
+   */
   const renderSingleField = (
+    key: string,
+    value: any,
+    onChange: (newValue: any) => void,
+    locationKey: string,
+  ) => (
+    <div key={locationKey} className="flex flex-col">
+      {renderFieldContent(key, value, onChange, locationKey)}
+    </div>
+  );
+
+  const renderFieldContent = (
     key: string,
     value: any,
     onChange: (newValue: any) => void,

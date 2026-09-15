@@ -109,6 +109,13 @@ export const useEditorStore = create<EditorStore>()(
     {
       name: "clinic-page-builder-storage", // Clave en localStorage
       storage: createJSONStorage(() => localStorage),
+      // La fuente de verdad es la API (`/pages/:id/editor`). Este store es
+      // solo una cache para el preview, y si hidrata durante el primer render
+      // choca con el HTML del servidor (que no tiene localStorage).
+      //
+      // Con `skipHydration` arranca vacio igual en servidor y cliente, y la
+      // pagina llama a `rehydrate` tras montar (ver EditorLoader).
+      skipHydration: true,
     },
   ),
 );

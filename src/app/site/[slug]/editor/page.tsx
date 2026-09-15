@@ -46,6 +46,12 @@ export default function PageBuilderPage() {
   } = useEditorStore();
 
   useEffect(() => {
+    // El store usa `skipHydration` para no romper la hidratacion de Next:
+    // hay que rehidratarlo a mano una vez montado en el cliente.
+    void useEditorStore.persist.rehydrate();
+  }, []);
+
+  useEffect(() => {
     if (!pageId) {
       router.replace("/");
       return;
