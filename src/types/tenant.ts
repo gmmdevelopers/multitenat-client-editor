@@ -12,6 +12,8 @@ export interface TenantContextInfo {
   id: string;
   name: string;
   slug: string;
+  /** Plan comercial del tenant: basic | full | pro. */
+  plan?: "basic" | "full" | "pro";
 }
 
 export interface AdminUser {

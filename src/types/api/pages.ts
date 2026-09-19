@@ -50,6 +50,8 @@ export type DeletePageResponse = void;
 
 export interface GetPageForEditorResponse {
   id: string;
+  /** Necesario para crear paginas nuevas desde el selector de templates. */
+  siteId: string | null;
   path: string;
   title: string;
   blocks: BlockInstance[];

@@ -109,12 +109,20 @@ export const useEditorStore = create<EditorStore>()(
     {
       name: "clinic-page-builder-storage", // Clave en localStorage
       storage: createJSONStorage(() => localStorage),
-      // La fuente de verdad es la API (`/pages/:id/editor`). Este store es
-      // solo una cache para el preview, y si hidrata durante el primer render
-      // choca con el HTML del servidor (que no tiene localStorage).
+      // La fuente de verdad es la API (`/pages/:id/editor`). Si ademas se
+      // persisten los bloques, localStorage compite con la API y pisa lo que
+      // se acaba de cargar (era el bug: aplicar una plantilla y ver como los
+      // bloques desaparecian al rehidratar).
       //
+      // Con `partialize` guardamos solo `blocks` y `pageId`, que son lo unico
+      // que necesita la pestana de preview para pintar el borrador.
+      partialize: (state) => ({
+        blocks: state.blocks,
+        pageId: state.pageId,
+      }),
       // Con `skipHydration` arranca vacio igual en servidor y cliente, y la
-      // pagina llama a `rehydrate` tras montar (ver EditorLoader).
+      // pagina llama a `rehydrate` tras montar, antes de pedir la pagina a la
+      // API, para que su contenido gane sobre lo persistido.
       skipHydration: true,
     },
   ),

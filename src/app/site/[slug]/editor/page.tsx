@@ -6,12 +6,29 @@ import { Canvas } from "@/components/editor/Canvas";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { OrganismTooltipPreview } from "@/components/editor/OrganismTooltipPreview";
 import { useEditorStore } from "@/hooks/useEditorStore";
-import { ORGANISMS_REGISTRY } from "@/lib/editor-registry";
+import {
+  DEFAULT_SITE_TYPE,
+  ORGANISMS_REGISTRY,
+  getLockedOrganismsForTab,
+  getOrganismsForTab,
+  templateToBlocks,
+} from "@/lib/editor-registry";
+import { TemplateGallery } from "@/components/editor/TemplateGallery";
+import type { ComponentRegistryEntry } from "@multitenant/design-system";
+import { useAuth } from "@/context/AuthContext";
+import type { Plan } from "@multitenant/design-system";
+import {
+  OrganismTabs,
+  type OrganismTab,
+} from "@/components/editor/OrganismTabs";
+import { useMemo, useRef } from "react";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import {
+  createPage,
   getPageForEditor,
   publishPage,
   saveDraftBlocks,
+  updatePage,
 } from "@/lib/api/pages";
 import { ViewportMode } from "@/components/editor/ViewportSelector";
 import { useToast } from "@/context/ToastContext";
@@ -22,6 +39,7 @@ export default function PageBuilderPage() {
   const searchParams = useSearchParams();
   const pageId = searchParams.get("pageId");
   const toast = useToast();
+  const { tenant } = useAuth();
 
   const [zoom, setZoom] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
@@ -30,8 +48,50 @@ export default function PageBuilderPage() {
   const [pageTitle, setPageTitle] = useState("");
   const [pagePath, setPagePath] = useState("/");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
+  /** Evita que la carga inicial pise una plantilla ya aplicada. */
+  const templateAppliedRef = useRef(false);
   const [hasUnpublished, setHasUnpublished] = useState(false);
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
+  const [activeTab, setActiveTab] = useState<OrganismTab>("all");
+  const [sidebarMode, setSidebarMode] = useState<"sections" | "templates">(
+    "sections",
+  );
+
+  // El plan del tenant decide si aparecen las capacidades premium
+  // (el ecommerce es plan pro). Si no viene, asumimos producto base.
+  const tenantPlan: Plan = (tenant?.plan as Plan) ?? "basic";
+
+  // Organismos visibles segun el tab activo y el plan contratado.
+  const visibleOrganisms = useMemo(
+    () => getOrganismsForTab(activeTab, false, tenantPlan),
+    [activeTab, tenantPlan],
+  );
+
+  const lockedOrganisms = useMemo(
+    () => getLockedOrganismsForTab(activeTab, tenantPlan),
+    [activeTab, tenantPlan],
+  );
+
+  // Conteo por tab para mostrarlo en cada boton.
+  const tabCounts = useMemo(() => {
+    const tabs: OrganismTab[] = [
+      "all",
+      "medical",
+      "dental",
+      "skincare",
+      "barber",
+      "massage",
+    ];
+
+    return tabs.reduce(
+      (acc, tab) => {
+        acc[tab] = getOrganismsForTab(tab, false, tenantPlan).length;
+        return acc;
+      },
+      {} as Record<OrganismTab, number>,
+    );
+  }, [tenantPlan]);
 
   const {
     blocks,
@@ -46,12 +106,6 @@ export default function PageBuilderPage() {
   } = useEditorStore();
 
   useEffect(() => {
-    // El store usa `skipHydration` para no romper la hidratacion de Next:
-    // hay que rehidratarlo a mano una vez montado en el cliente.
-    void useEditorStore.persist.rehydrate();
-  }, []);
-
-  useEffect(() => {
     if (!pageId) {
       router.replace("/");
       return;
@@ -59,10 +113,27 @@ export default function PageBuilderPage() {
 
     let cancelled = false;
 
-    void getPageForEditor(pageId)
+    // Rehidratamos ANTES de pedir la pagina a la API. Si se rehidrata despues,
+    // localStorage restaura los bloques viejos y pisa los recien cargados
+    // (era el bug de "aplico una plantilla y desaparece").
+    void Promise.resolve(useEditorStore.persist.rehydrate())
+      .catch(() => undefined)
+      .then(() => getPageForEditor(pageId))
       .then((page) => {
         if (cancelled) return;
+
+        // Si el usuario ya aplico una plantilla, no pisamos su trabajo con lo
+        // que devuelve el servidor (que aun tiene los bloques antiguos).
+        if (templateAppliedRef.current) {
+          setActiveSiteId(page.siteId ?? null);
+          setPagePath(page.path);
+          setLoadError(null);
+          return;
+        }
+
+        // La API es la fuente de verdad: sobrescribe lo persistido.
         loadBlocks(page.blocks ?? [], page.id);
+        setActiveSiteId(page.siteId ?? null);
         setPageTitle(page.title);
         setPagePath(page.path);
         setHasUnpublished(page.hasUnpublishedChanges);
@@ -125,6 +196,63 @@ export default function PageBuilderPage() {
       }
     } finally {
       setIsPublishing(false);
+    }
+  }
+
+  /**
+   * Carga una plantilla reemplazando los bloques del canvas actual.
+   * No guarda: el usuario revisa y decide si guarda o publica.
+   */
+  function handleApplyTemplate(entry: ComponentRegistryEntry) {
+    const blocks = templateToBlocks(entry);
+
+    if (blocks.length === 0) {
+      toast.error("Esta plantilla no tiene secciones definidas.");
+      return;
+    }
+
+    // Marcamos que el canvas ya tiene contenido propio para que el efecto de
+    // carga inicial no vuelva a pedir la pagina y pise la plantilla.
+    templateAppliedRef.current = true;
+    loadBlocks(blocks);
+    setPageTitle(entry.meta.displayName);
+    toast.success(
+      `Plantilla "${entry.meta.displayName}" cargada (${blocks.length} secciones)`,
+    );
+  }
+
+  /**
+   * Crea una pagina nueva a partir de una plantilla y navega a ella.
+   * El path se deriva del tipo de pagina para que el cliente solo lo ajuste.
+   */
+  async function handleCreatePageFromTemplate(entry: ComponentRegistryEntry) {
+    if (!activeSiteId || !tenant) {
+      toast.error("No se pudo determinar el sitio actual.");
+      return;
+    }
+
+    const basePath = `/${entry.meta.pageKind ?? "pagina"}`;
+    const path = window.prompt(
+      "Ruta de la nueva página (ej: /servicios):",
+      basePath,
+    );
+
+    if (!path) return;
+
+    try {
+      const { page } = await createPage({
+        siteId: activeSiteId,
+        path,
+        title: entry.meta.displayName,
+        seoTitle: entry.meta.displayName,
+        seoDescripcion: entry.meta.description ?? "",
+        blocks: templateToBlocks(entry),
+      });
+
+      toast.success("Página creada desde template");
+      router.push(`?pageId=${page.id}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "No se pudo crear la página."));
     }
   }
 
@@ -203,12 +331,64 @@ export default function PageBuilderPage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar Izquierdo */}
         <aside className="w-72 shrink-0 border-r border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
-          <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-400">
-            Agregar Secciones
-          </h2>
+          {/* Dos formas de arrancar: bloques sueltos o un template completo. */}
+          <div className="mb-3 flex rounded-xl bg-stone-950/60 p-1">
+            <button
+              type="button"
+              onClick={() => setSidebarMode("sections")}
+              className={`flex-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition ${
+                sidebarMode === "sections"
+                  ? "bg-stone-800 text-white"
+                  : "text-stone-400 hover:text-white"
+              }`}
+            >
+              Secciones
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarMode("templates")}
+              className={`flex-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition ${
+                sidebarMode === "templates"
+                  ? "bg-amber-400 text-black"
+                  : "text-stone-400 hover:text-white"
+              }`}
+            >
+              Templates
+            </button>
+          </div>
+
+          {sidebarMode === "sections" ? (
+            <>
+          <OrganismTabs
+            active={activeTab}
+            onChange={setActiveTab}
+            counts={tabCounts}
+          />
 
           <div className="flex flex-col gap-2">
-            {ORGANISMS_REGISTRY.map(({ meta }) => (
+            {/* Capacidades premium: se anuncian pero no se pueden usar hasta
+                subir de plan. Ocultarlas del todo escondería el upgrade. */}
+            {lockedOrganisms.length > 0 ? (
+              <div className="mt-2 rounded-xl border-dashed border-amber-400/30 bg-amber-400/5 p-3">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                  Disponible en plan Pro
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {lockedOrganisms.map(({ meta }) => (
+                    <div
+                      key={meta.name}
+                      className="flex items-center justify-between rounded-lg bg-stone-950/60 px-2.5 py-1.5"
+                    >
+                      <span className="text-[11px] text-stone-400">
+                        {meta.displayName}
+                      </span>
+                      <span className="text-[10px] text-amber-400">🔒</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {visibleOrganisms.map(({ meta }) => (
               <OrganismTooltipPreview
                 key={meta.name}
                 metaName={meta.name}
@@ -217,7 +397,23 @@ export default function PageBuilderPage() {
                 onAdd={() => addOrganism(meta.name)}
               />
             ))}
+
+            {visibleOrganisms.length === 0 ? (
+              <p className="rounded-xl border-dashed border-stone-800 p-4 text-center text-[11px] text-stone-500">
+                Todavía no hay organismos con diseño para este tipo de sitio.
+                Puedes usar los del tab <strong>Todos</strong>.
+              </p>
+            ) : null}
           </div>
+            </>
+          ) : (
+            <TemplateGallery
+              plan={tenantPlan}
+              busy={isLoadingPage}
+              onApplyToCurrent={handleApplyTemplate}
+              onCreatePage={handleCreatePageFromTemplate}
+            />
+          )}
         </aside>
 
         {/* Canvas Central */}
