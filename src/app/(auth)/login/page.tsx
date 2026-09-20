@@ -1,19 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage } from "@/lib/api/errors";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
+  const router = useRouter();
   const toast = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Si ya hay una sesion valida en memoria, no tiene sentido mostrar el
+  // formulario: el proxy deja pasar /login siempre y redirigimos aqui.
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/");
+    }
+  }, [loading, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +32,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(email, password, tenantSlug);
     } catch (err) {
       const message = getErrorMessage(
         err,
@@ -56,6 +67,24 @@ export default function LoginPage() {
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Organización (slug del tenant) */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+              Organización
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="salud-bienestar"
+              value={tenantSlug}
+              onChange={(e) => setTenantSlug(e.target.value)}
+              className="w-full rounded-lg border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition"
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              El identificador de tu sitio: aparece en tu dirección web.
+            </p>
+          </div>
+
           {/* Email */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">

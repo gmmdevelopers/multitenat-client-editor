@@ -15,7 +15,7 @@ interface AuthContextType {
   user: AdminUser | null;
   tenant: TenantContextInfo | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, tenantSlug: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -68,16 +68,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
   }, [loading, user]);
 
-  const login = async (email: string, password: string) => {
-    const data = await loginRequest(email, password);
+  const login = async (
+    email: string,
+    password: string,
+    tenantSlug: string,
+  ) => {
+    const data = await loginRequest(email, password, tenantSlug);
 
     // El backend responde { accessToken, user: { ..., tenant }.
     const loggedUser = data.user;
     persistToken(data.accessToken);
     localStorage.setItem("user", JSON.stringify(loggedUser));
+
+    // El proxy la usa para reescribir /editor a /site/<slug>/editor: el panel
+    // es agnostico al tenant y necesita saber cual es la organizacion activa.
+    document.cookie = `x-org-slug=${encodeURIComponent(
+      tenantSlug,
+    )}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
     setUser(loggedUser);
     setTenant(loggedUser.tenant ?? null);
 
+    // `/` resuelve el site y la pagina home del tenant, y desde ahi manda al
+    // editor con el `pageId` correcto.
     router.push("/");
   };
 

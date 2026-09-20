@@ -338,8 +338,8 @@ export function PropertiesPanel({
     // 5. Input Estándar
     return (
       <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-medium text-stone-400 capitalize">
-          {key}
+        <label className="text-[10px] font-medium text-stone-400">
+          {fieldLabels.get(key) ?? key}
         </label>
         <input
           type={typeof value === "number" ? "number" : "text"}
@@ -356,6 +356,22 @@ export function PropertiesPanel({
       </div>
     );
   };
+
+  // El editor debe mostrar las etiquetas del meta, no el nombre crudo de la
+  // prop: un campo `heroDescription` se lee mejor como "Hero description".
+  // Los metas nuevos declaran sus campos en `groups`, asi que aplanamos
+  // fields + groups en un mapa propName -> label.
+  const fieldLabels = new Map<string, string>();
+  const meta = registryEntry?.meta;
+
+  const collectLabels = (
+    fields: readonly { name: string; label: string }[] | undefined,
+  ) => {
+    for (const field of fields ?? []) fieldLabels.set(field.name, field.label);
+  };
+
+  collectLabels(meta?.fields);
+  for (const group of meta?.groups ?? []) collectLabels(group.fields);
 
   return (
     <aside className="w-80 border-l border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
@@ -380,8 +396,8 @@ export function PropertiesPanel({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <label className="text-xs font-semibold capitalize text-stone-300">
-                      {propName}
+                    <label className="text-xs font-semibold text-stone-300">
+                      {fieldLabels.get(propName) ?? propName}
                     </label>
                     <span className="rounded-full bg-stone-800 px-1.5 py-0.2 text-[10px] text-stone-400">
                       {propValue.length}

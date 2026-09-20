@@ -5,10 +5,14 @@ import type { LoginResponse } from "@/types/api/auth";
 export async function loginRequest(
   email: string,
   password: string,
+  tenantSlug: string,
 ): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>("/auth/login", {
     email,
     password,
+    // El panel vive en app.<dominio>, sin subdominio de tenant: el slug viaja
+    // en el body para que el backend sepa a que organizacion autenticar.
+    tenantSlug,
   });
   return data;
 }

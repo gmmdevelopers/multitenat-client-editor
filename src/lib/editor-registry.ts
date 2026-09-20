@@ -125,8 +125,30 @@ export function getDefaultPropsForOrganism(
   collect(entry.meta.fields);
   for (const group of entry.meta.groups ?? []) collect(group.fields);
 
+  // Props que no vienen del meta pero sin las cuales el preview se ve roto.
+  // La agenda, por ejemplo, recibe los profesionales por API; para la vista
+  // previa basta un ejemplo para que no muestre "no hay profesionales".
+  Object.assign(props, PREVIEW_PLACEHOLDER_PROPS[metaName] ?? {});
+
   return props;
 }
+
+/**
+ * Datos de ejemplo para la vista previa del sidebar.
+ *
+ * Solo cubre props que el consumidor normalmente inyecta (API, estado), no las
+ * que ya declara el meta.
+ */
+const PREVIEW_PLACEHOLDER_PROPS: Record<string, Record<string, unknown>> = {
+  AppointmentScheduler: {
+    professionals: [
+      { id: "preview-1", fullName: "Dra. Camila Reyes" },
+      { id: "preview-2", fullName: "Valentina Rios" },
+    ],
+    onLoadSlots: async () => [],
+    onConfirm: async () => undefined,
+  },
+};
 /** Un grupo de templates listo para pintar en el selector del editor. */
 export interface TemplateGroup {
   kind: PageKind;

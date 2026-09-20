@@ -1,89 +1,118 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+/**
+ * Separacion de dominios:
+ *
+ *   app.<dominio>            -> panel del cliente (login, editor, settings)
+ *   <slug>.<dominio>         -> web publica del tenant (solo render)
+ *
+ * Son dos mundos que no se mezclan: el panel exige sesion y la web publica no.
+ * Antes compartian el subdominio del tenant, y eso hacia que `/` significara
+ * dos cosas distintas (editor para el cliente, web para el visitante).
+ */
+
 const PUBLIC_AUTH_ROUTES = ["/login", "/register"];
-const PROTECTED_ROUTES = ["/editor", "/settings"];
+const PANEL_ROUTE_PREFIXES = ["/editor", "/settings"];
+
+const APP_SUBDOMAIN = "app";
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const hostname = req.headers.get("host") || "";
+  const hostname = (req.headers.get("host") || "").split(":")[0];
   const token = req.cookies.get("accessToken")?.value;
 
-  console.log("--> Host de la petición:", req.headers.get("host"));
-  console.log("--> Token detectado en proxy:", token); // llega undefined
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || "multitenant.com";
 
-  // 1. Extraer el host sin el puerto (ej: "salud-bienestar.localhost")
-  const hostWithoutPort = hostname.split(":")[0];
-
-  // 2. Definir si es el dominio raíz absoluto
+  // --- Clasificar el host ---
   const isLocalhostRoot =
-    hostWithoutPort === "localhost" || hostWithoutPort === "127.0.0.1";
-  const isMainDomainRoot =
-    hostWithoutPort ===
-    (process.env.NEXT_PUBLIC_APP_DOMAIN || "multitenant.com");
-  const isMainDomain = isLocalhostRoot || isMainDomainRoot;
+    hostname === "localhost" || hostname === "127.0.0.1";
+  const isAppHost =
+    hostname === `app.${appDomain}` ||
+    hostname === `app.localhost` ||
+    hostname === `${APP_SUBDOMAIN}.${appDomain}` ||
+    isLocalhostRoot;
 
-  // 3. Extraer el subdominio/slug (ej: "salud-bienestar")
-  const currentHost = hostWithoutPort
-    .replace(".localhost", "")
-    .replace(`.${process.env.NEXT_PUBLIC_APP_DOMAIN}`, "");
+  // El slug es el subdominio del tenant en la web publica.
+  const tenantSlug = isAppHost
+    ? undefined
+    : hostname.replace(`.${appDomain}`, "").replace(".localhost", "");
 
-  // /preview vive fuera del grupo /site/[slug], asi que queda exenta del
-  // rewrite multi-tenant: si no, en un subdominio se convertiria en
-  // /site/<slug>/preview, que no existe.
-  const isStandaloneRoute = pathname.startsWith("/preview");
-
-  const isAuthRoute = PUBLIC_AUTH_ROUTES.some((route) =>
-    pathname.startsWith(route),
-  );
-  const isProtectedRoute =
-    isStandaloneRoute ||
-    PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
-
-  // --- REGLAS DE REDIRECCIÓN Y AUTENTICACIÓN ---
-
-  // Si intenta acceder a ruta protegida sin token
-  if (isProtectedRoute && !token) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-  console.log(isAuthRoute && token);
-
-  // Si intenta acceder a /login teniendo ya token
-  if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-
-  console.log({
-    hostname,
-    hostWithoutPort,
-    isMainDomain,
-    currentHost,
-    NEXT_PUBLIC_APP_DOMAIN: process.env.NEXT_PUBLIC_APP_DOMAIN,
-    rewriteTo: `/site/${currentHost}${pathname}`,
-  });
-
-  // --- REESCRITURA DE RUTA MULTI-TENANT ---
-  //
-  // El grupo /site/[slug] NO es la web pública del tenant: es el panel del
-  // editor. Si reescribimos la raiz "/" a /site/<slug>/ caemos en una ruta
-  // inexistente (solo existe /site/[slug]/editor y /settings) y el usuario
-  // ve un 404 justo despues del login.
-  //
-  // Por eso solo reescribimos rutas que realmente cuelgan del panel.
-  const PANEL_ROUTE_PREFIXES = ["/editor", "/settings"];
   const isPanelRoute = PANEL_ROUTE_PREFIXES.some((route) =>
     pathname.startsWith(route),
   );
+  const isAuthRoute = PUBLIC_AUTH_ROUTES.some((route) =>
+    pathname.startsWith(route),
+  );
+  const isStandaloneRoute = pathname.startsWith("/preview");
 
-  if (!isMainDomain && !isAuthRoute && !isStandaloneRoute && isPanelRoute) {
-    return NextResponse.rewrite(
-      new URL(`/site/${currentHost}${pathname}`, req.url),
-    );
+  // --- PANEL (app.*) ---
+  if (isAppHost) {
+    // Sin sesion, cualquier ruta del panel manda al login.
+    if (!token && !isAuthRoute && !isStandaloneRoute) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("from", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // /login siempre se sirve, aunque haya token en la cookie.
+    //
+    // Rebortar al editor cuando la cookie existe provocaba un bucle: token
+    // invalido -> /login -> /editor -> 401 -> /login... Si ya hay una sesion
+    // valida, la propia pagina de login redirige al editor.
+    if (isAuthRoute) {
+      return NextResponse.next();
+    }
+
+    // El editor vive en /site/<slug>/editor, pero el panel es agnostico al
+    // tenant: se reescribe con el slug de la organizacion activa, que el
+    // navegador guarda al iniciar sesion.
+    if (isPanelRoute) {
+      const slug = req.cookies.get("x-org-slug")?.value;
+
+      if (slug) {
+        return NextResponse.rewrite(
+          new URL(`/site/${slug}${pathname}`, req.url),
+        );
+      }
+    }
+
+    // `/` se deja pasar: la propia pagina resuelve el site del tenant y la
+    // pagina home, y desde ahi redirige al editor con el `pageId` correcto.
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // --- WEB PUBLICA (tenant.*) ---
+  //
+  // Aqui no hay panel ni sesion: todo se renderiza como el sitio del cliente.
+  // El tenant viaja en cookie porque en local el backend no siempre puede
+  // resolverlo por subdominio.
+  const response = NextResponse.next();
+
+  if (tenantSlug) {
+    response.cookies.set("x-tenant-slug", tenantSlug, {
+      path: "/",
+      sameSite: "lax",
+    });
+  }
+
+  if (pathname.startsWith("/login") || isPanelRoute) {
+    // El panel no vive en el dominio publico.
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  const publicUrl = new URL(`/publico/${tenantSlug ?? "sitio"}`, req.url);
+  publicUrl.searchParams.set("path", pathname);
+
+  const rewritten = NextResponse.rewrite(publicUrl);
+  if (tenantSlug) {
+    rewritten.cookies.set("x-tenant-slug", tenantSlug, {
+      path: "/",
+      sameSite: "lax",
+    });
+  }
+
+  return rewritten;
 }
 
 export const config = {

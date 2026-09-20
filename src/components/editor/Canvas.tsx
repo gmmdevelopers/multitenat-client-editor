@@ -20,6 +20,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { RotateCcw } from "lucide-react";
 
 import { ORGANISMS_MAP } from "@/lib/editor-registry";
+import { CONNECTED_ORGANISMS } from "./connected-organisms";
 import { BlockInstance } from "@/types/editor-state";
 import { ViewportMode } from "./ViewportSelector";
 
@@ -108,7 +109,10 @@ function SortableBlock({
   const registryEntry = ORGANISMS_MAP.get(block.metaName);
   if (!registryEntry) return null;
 
-  const Component = registryEntry.component;
+  // Algunos organismos necesitan logica de cliente (la agenda habla con la
+  // API). Si existe una version conectada, esa gana sobre la del design system.
+  const Component =
+    CONNECTED_ORGANISMS[block.metaName] ?? registryEntry.component;
 
   return (
     <div

@@ -68,3 +68,27 @@ export async function publishPage(
   );
   return data;
 }
+
+/**
+ * Página publicada, resuelta por PATH dentro del tenant.
+ * Es lo que alimenta el render público de la web del cliente.
+ */
+export interface PublicPageResponse {
+  id: string;
+  path: string;
+  title: string;
+  seoTitle: string;
+  seoDescripcion: string;
+  publishedBlocks: BlockInstance[];
+  publishedAt: string | null;
+}
+
+/** Resuelve una página publicada por su ruta. Endpoint público, sin sesión. */
+export async function getPublicPageByPath(
+  path: string,
+): Promise<PublicPageResponse> {
+  const { data } = await api.get<PublicPageResponse>("/pages/public/by-path", {
+    params: { path },
+  });
+  return data;
+}

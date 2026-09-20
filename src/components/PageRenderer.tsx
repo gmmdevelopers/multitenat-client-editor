@@ -1,6 +1,7 @@
 "use client";
 
 import { ORGANISMS_MAP } from "@/lib/editor-registry";
+import { CONNECTED_ORGANISMS } from "@/components/editor/connected-organisms";
 import { BlockInstance } from "@/types/editor-state";
 
 interface PageRendererProps {
@@ -35,7 +36,10 @@ export function PageRenderer({ blocks }: PageRendererProps) {
         const entry = ORGANISMS_MAP.get(block.metaName);
         if (!entry) return null;
 
-        const Component = entry.component;
+        // La agenda (y cualquier organismo con logica de cliente) necesita su
+        // version conectada tambien en la web publica, no solo en el editor.
+        const Component =
+          CONNECTED_ORGANISMS[block.metaName] ?? entry.component;
 
         return <Component key={block.id} {...block.props} />;
       })}
