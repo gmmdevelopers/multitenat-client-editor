@@ -3,6 +3,10 @@
 import type { ComponentType } from "react";
 
 import { ConnectedSchedulerBlock } from "./ConnectedSchedulerBlock";
+import {
+  DentistAppointmentSectionConnected,
+  SkincareAppointmentSectionConnected,
+} from "./ConnectedAppointmentSection";
 
 /**
  * Componentes que necesitan logica de cliente (HTTP, estado, sesion).
@@ -16,4 +20,8 @@ import { ConnectedSchedulerBlock } from "./ConnectedSchedulerBlock";
  */
 export const CONNECTED_ORGANISMS: Record<string, ComponentType<any>> = {
   AppointmentScheduler: ConnectedSchedulerBlock,
+  // Las secciones de agenda por vertical son envoltorios: aqui les inyectamos
+  // la agenda real, o el cliente veria el texto "arrastra el bloque".
+  DentistAppointmentSection: DentistAppointmentSectionConnected,
+  SkincareAppointmentSection: SkincareAppointmentSectionConnected,
 };

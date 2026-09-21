@@ -87,7 +87,12 @@ export default function DashboardLayout({
 
       {/* Contenedor de la vista: el hijo maneja su propio scroll interno.
           `min-h-0` evita que un hijo con altura fija desborde el flex. */}
-      <div className="flex min-h-0 flex-1 bg-gray-900">{children}</div>
+      {/* `min-h-0` permite que el hijo encoja dentro del flex, y `overflow-y-auto`
+          hace scrolleable el contenido largo (por ejemplo Configuración) sin
+          tocar el sidebar, que queda fijo. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-gray-900">
+        {children}
+      </div>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import type {
   UpdatePageResponse,
 } from "@/types/api/pages";
 import { BlockInstance } from "@/types/editor-state";
+import type { PageSummary } from "@/types/site";
 
 export async function getPage(pageId: string) {
   const { data } = await api.get<GetPageResponse>(`/pages/${pageId}`);
@@ -28,8 +29,14 @@ export async function deletePage(pageId: string) {
   await api.delete(`/pages/${pageId}`);
 }
 
-export async function listPages(siteId: string) {
-  const { data } = await api.get<ListPagesResponse>(`/sites/${siteId}/pages`);
+/**
+ * Paginas de un sitio.
+ *
+ * El backend responde un ARRAY plano (no `{ pages }`), asi que el tipo refleja
+ * eso: tiparlo como `{ pages }` hacia que el consumidor leyera `undefined`.
+ */
+export async function listPages(siteId: string): Promise<PageSummary[]> {
+  const { data } = await api.get<PageSummary[]>(`/sites/${siteId}/pages`);
   return data;
 }
 

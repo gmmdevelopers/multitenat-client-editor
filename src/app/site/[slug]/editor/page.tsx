@@ -21,15 +21,22 @@ import {
   OrganismTabs,
   type OrganismTab,
 } from "@/components/editor/OrganismTabs";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import {
   createPage,
+  deletePage,
   getPageForEditor,
+  listPages,
   publishPage,
   saveDraftBlocks,
   updatePage,
 } from "@/lib/api/pages";
+import { getSiteHomePage } from "@/lib/api/sites";
+import { PagesPanel } from "@/components/editor/PagesPanel";
+import { DeletePageModal } from "@/components/editor/DeletePageModal";
+import { CreatePageModal } from "@/components/editor/CreatePageModal";
+import type { PageSummary } from "@/types/site";
 import { ViewportMode } from "@/components/editor/ViewportSelector";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage } from "@/lib/api/errors";
@@ -49,14 +56,21 @@ export default function PageBuilderPage() {
   const [pagePath, setPagePath] = useState("/");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
+  const [pages, setPages] = useState<PageSummary[]>([]);
+  const [isLoadingPages, setIsLoadingPages] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [pendingCreate, setPendingCreate] =
+    useState<ComponentRegistryEntry | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   /** Evita que la carga inicial pise una plantilla ya aplicada. */
   const templateAppliedRef = useRef(false);
   const [hasUnpublished, setHasUnpublished] = useState(false);
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [activeTab, setActiveTab] = useState<OrganismTab>("all");
-  const [sidebarMode, setSidebarMode] = useState<"sections" | "templates">(
-    "sections",
-  );
+  const [sidebarMode, setSidebarMode] = useState<
+    "pages" | "sections" | "templates"
+  >("sections");
 
   // El plan del tenant decide si aparecen las capacidades premium
   // (el ecommerce es plan pro). Si no viene, asumimos producto base.
@@ -225,34 +239,108 @@ export default function PageBuilderPage() {
    * Crea una pagina nueva a partir de una plantilla y navega a ella.
    * El path se deriva del tipo de pagina para que el cliente solo lo ajuste.
    */
-  async function handleCreatePageFromTemplate(entry: ComponentRegistryEntry) {
+  /**
+   * Abre el modal de creacion con el template elegido.
+   *
+   * Antes se usaba `window.prompt`, que bloquea el navegador y no permite
+   * validar la ruta antes de enviarla.
+   */
+  function handleCreatePageFromTemplate(entry: ComponentRegistryEntry) {
     if (!activeSiteId || !tenant) {
       toast.error("No se pudo determinar el sitio actual.");
       return;
     }
 
-    const basePath = `/${entry.meta.pageKind ?? "pagina"}`;
-    const path = window.prompt(
-      "Ruta de la nueva página (ej: /servicios):",
-      basePath,
-    );
+    setPendingCreate(entry);
+  }
 
-    if (!path) return;
+  /** Crea la pagina con la ruta y el titulo confirmados en el modal. */
+  async function handleConfirmCreate(path: string, title: string) {
+    if (!pendingCreate || !activeSiteId) return;
 
+    setIsCreating(true);
     try {
       const { page } = await createPage({
         siteId: activeSiteId,
         path,
-        title: entry.meta.displayName,
-        seoTitle: entry.meta.displayName,
-        seoDescripcion: entry.meta.description ?? "",
-        blocks: templateToBlocks(entry),
+        title,
+        seoTitle: title,
+        seoDescripcion: pendingCreate.meta.description ?? "",
+        blocks: templateToBlocks(pendingCreate),
       });
 
-      toast.success("Página creada desde template");
+      toast.success(`Página «${path}» creada`);
+      setPendingCreate(null);
+      templateAppliedRef.current = false;
+      void refreshPages();
       router.push(`?pageId=${page.id}`);
     } catch (err) {
       toast.error(getErrorMessage(err, "No se pudo crear la página."));
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  /** Recarga el listado de paginas del sitio. */
+  const refreshPages = useCallback(async () => {
+    if (!activeSiteId) return;
+    setIsLoadingPages(true);
+    try {
+      setPages(await listPages(activeSiteId));
+    } catch (err) {
+      toast.error(getErrorMessage(err, "No se pudo cargar el listado de páginas."));
+    } finally {
+      setIsLoadingPages(false);
+    }
+  }, [activeSiteId, toast]);
+
+  useEffect(() => {
+    if (activeSiteId) void refreshPages();
+  }, [activeSiteId, refreshPages]);
+
+  /** Abre otra pagina del sitio sin salir del editor. */
+  function handleOpenPage(nextPageId: string) {
+    // La plantilla aplicada pertenece a la pagina anterior: al cambiar de
+    // pagina, la API vuelve a mandar.
+    templateAppliedRef.current = false;
+    router.push(`?pageId=${nextPageId}`);
+  }
+
+  /**
+   * Crea una pagina nueva. Reutiliza el flujo de templates, que es donde el
+   * usuario elige el diseno de partida.
+   */
+  function handleCreatePage() {
+    setSidebarMode("templates");
+    toast.info("Elige una plantilla y pulsa «Página nueva».");
+  }
+
+  /** Confirma el borrado tras escribir la ruta en el modal. */
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await deletePage(pendingDelete.id);
+
+      toast.success(`Página «${pendingDelete.path}» eliminada`);
+      setPendingDelete(null);
+
+      // Si borramos la que estaba abierta, volvemos al home del sitio.
+      if (pendingDelete.id === pageId) {
+        if (activeSiteId) {
+          const home = await getSiteHomePage(activeSiteId);
+          templateAppliedRef.current = false;
+          router.push(`?pageId=${home.pageId}`);
+        }
+        return;
+      }
+
+      void refreshPages();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "No se pudo eliminar la página."));
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -279,7 +367,7 @@ export default function PageBuilderPage() {
 
   if (isLoadingPage) {
     return (
-      <div className="flex h-screen items-center justify-center bg-stone-950 text-white">
+      <div className="flex h-full items-center justify-center bg-stone-950 text-white">
         <span className="animate-pulse">Cargando página...</span>
       </div>
     );
@@ -287,7 +375,7 @@ export default function PageBuilderPage() {
 
   if (loadError) {
     return (
-      <div className="flex h-screen items-center justify-center bg-stone-950 px-4 text-center">
+      <div className="flex h-full items-center justify-center bg-stone-950 px-4 text-center">
         <div className="max-w-md rounded-xl border-red-500/50 bg-red-500/10 p-6 text-sm text-red-400">
           {loadError}
         </div>
@@ -296,7 +384,10 @@ export default function PageBuilderPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-stone-950 font-sans text-white">
+    // `h-full` en vez de `h-screen`: el editor vive dentro del contenedor del
+    // layout (que ya define la altura de la ventana), asi que declarar
+    // `h-screen` otra vez sumaba altura y rompia el scroll.
+    <div className="flex h-full flex-col overflow-hidden bg-stone-950 font-sans text-white">
       <EditorToolbar
         blocksLength={blocks.length}
         handleViewportChange={setViewportMode}
@@ -331,12 +422,23 @@ export default function PageBuilderPage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar Izquierdo */}
         <aside className="w-72 shrink-0 border-r border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
-          {/* Dos formas de arrancar: bloques sueltos o un template completo. */}
+          {/* Tres modos: gestionar paginas, anadir bloques o partir de plantilla. */}
           <div className="mb-3 flex rounded-xl bg-stone-950/60 p-1">
             <button
               type="button"
+              onClick={() => setSidebarMode("pages")}
+              className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                sidebarMode === "pages"
+                  ? "bg-stone-800 text-white"
+                  : "text-stone-400 hover:text-white"
+              }`}
+            >
+              Páginas
+            </button>
+            <button
+              type="button"
               onClick={() => setSidebarMode("sections")}
-              className={`flex-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition ${
+              className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
                 sidebarMode === "sections"
                   ? "bg-stone-800 text-white"
                   : "text-stone-400 hover:text-white"
@@ -347,7 +449,7 @@ export default function PageBuilderPage() {
             <button
               type="button"
               onClick={() => setSidebarMode("templates")}
-              className={`flex-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition ${
+              className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
                 sidebarMode === "templates"
                   ? "bg-amber-400 text-black"
                   : "text-stone-400 hover:text-white"
@@ -357,7 +459,16 @@ export default function PageBuilderPage() {
             </button>
           </div>
 
-          {sidebarMode === "sections" ? (
+          {sidebarMode === "pages" ? (
+            <PagesPanel
+              pages={pages}
+              activePageId={pageId}
+              isLoading={isLoadingPages}
+              onOpen={handleOpenPage}
+              onDelete={setPendingDelete}
+              onCreate={handleCreatePage}
+            />
+          ) : sidebarMode === "sections" ? (
             <>
           <OrganismTabs
             active={activeTab}
@@ -435,6 +546,28 @@ export default function PageBuilderPage() {
           onUpdateProp={updateBlockProp}
         />
       </div>
+
+      {pendingCreate ? (
+        <CreatePageModal
+          templateName={pendingCreate.meta.displayName}
+          templateDescription={pendingCreate.meta.description}
+          suggestedPath={`/${pendingCreate.meta.pageKind ?? "pagina"}`}
+          existingPaths={pages.map((p) => p.path)}
+          isCreating={isCreating}
+          onCancel={() => setPendingCreate(null)}
+          onConfirm={(path, title) => void handleConfirmCreate(path, title)}
+        />
+      ) : null}
+
+      {pendingDelete ? (
+        <DeletePageModal
+          pageTitle={pendingDelete.title}
+          pagePath={pendingDelete.path}
+          isDeleting={isDeleting}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => void handleConfirmDelete()}
+        />
+      ) : null}
     </div>
   );
 }

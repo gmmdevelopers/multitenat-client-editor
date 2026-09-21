@@ -1,6 +1,9 @@
 "use client";
 
-import { ORGANISMS_MAP } from "@/lib/editor-registry";
+import {
+  ORGANISMS_MAP,
+  getDefaultPropsForOrganism,
+} from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "@/components/editor/connected-organisms";
 import { BlockInstance } from "@/types/editor-state";
 
@@ -41,7 +44,15 @@ export function PageRenderer({ blocks }: PageRendererProps) {
         const Component =
           CONNECTED_ORGANISMS[block.metaName] ?? entry.component;
 
-        return <Component key={block.id} {...block.props} />;
+        // Los defaults del meta rellenan lo que falte. Sin esto, una pagina
+        // cuyos bloques lleguen sin props (migracion, edicion por API) se
+        // renderiza en blanco en vez de mostrar su contenido por defecto.
+        const props = {
+          ...getDefaultPropsForOrganism(block.metaName),
+          ...(block.props ?? {}),
+        };
+
+        return <Component key={block.id} {...props} />;
       })}
     </div>
   );
