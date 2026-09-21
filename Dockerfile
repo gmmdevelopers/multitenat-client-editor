@@ -53,14 +53,16 @@ FROM node:24-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-
 # `output: standalone` deja un servidor minimo con solo las dependencias que la
 # app usa en runtime. Por eso no copiamos node_modules completo.
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-
-# Next escucha en PORT (Coolify lo inyecta).
+# CRITICO: el `server.js` de Next escucha en `process.env.HOSTNAME` si existe, y
+# Docker define HOSTNAME con el ID del contenedor. Sin esto, Next queda escuchando
+# en un hostname interno inalcanzable desde Traefik y el dominio da 502.
+ENV HOSTNAME=0.0.0.0
+# Coolify inyecta PORT; el default de Next standalone es 3000.
+ENV PORT=3000
 EXPOSE 3000
-
 CMD ["node", "server.js"]
