@@ -12,8 +12,11 @@ FROM node:24-slim AS builder
 
 WORKDIR /app
 
-# openssl lo usan algunas dependencias nativas.
-RUN apt-get update && apt-get install -y --no-install-recommends openssl git \
+# `ca-certificates` es imprescindible: `node:24-slim` no trae los certificados
+# raiz, y sin ellos git no puede verificar el HTTPS de GitHub al clonar el
+# design system (falla con "server certificate verification failed").
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # El token llega por build arg. Con esto, cualquier clonado de GitHub durante
