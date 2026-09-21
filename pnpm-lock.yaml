@@ -18,8 +18,8 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.8)
       '@multitenant/design-system':
-        specifier: file:../packages/design-system
-        version: link:../packages/design-system
+        specifier: github:gmmdevelopers/multitenant-design-system#main
+        version: git+https://github.com/gmmdevelopers/multitenant-design-system.git#5e04f37432b9c39e40c3b663fcaf237652032b4e(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       axios:
         specifier: ^1.20.0
         version: 1.20.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
@@ -421,6 +421,13 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@multitenant/design-system@git+https://github.com/gmmdevelopers/multitenant-design-system.git#5e04f37432b9c39e40c3b663fcaf237652032b4e':
+    resolution: {commit: 5e04f37432b9c39e40c3b663fcaf237652032b4e, repo: https://github.com/gmmdevelopers/multitenant-design-system.git, type: git}
+    version: 0.1.0
+    peerDependencies:
+      react: '>=19'
+      react-dom: '>=19'
 
   '@napi-rs/wasm-runtime@1.2.3':
     resolution: {integrity: sha512-UMduMbqO5s5zF2NkNacMT/yK5Y5QiKvWr2+50bzIIxFDwVJ2h49b+oyjaCGPhJxd2/gC2x39EHv/gHVuu36x2Q==}
@@ -2484,6 +2491,13 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@multitenant/design-system@git+https://github.com/gmmdevelopers/multitenant-design-system.git#5e04f37432b9c39e40c3b663fcaf237652032b4e(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      lucide-react: 1.41.0(react@19.2.8)
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+      react-icons: 5.7.0(react@19.2.8)
 
   '@napi-rs/wasm-runtime@1.2.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:

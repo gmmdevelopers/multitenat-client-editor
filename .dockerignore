@@ -1,0 +1,21 @@
+# Contexto de build del cliente.
+#
+# Sin esto, el `node_modules` local (con binarios de macOS) pisaria las
+# dependencias que instala el Dockerfile y el build fallaria en Linux.
+
+node_modules
+.next
+out
+
+.git
+.gitignore
+
+# Entorno: los NEXT_PUBLIC_* llegan como build args desde Coolify.
+.env
+.env.*
+!.env.example
+
+coverage
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
