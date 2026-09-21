@@ -35,13 +35,43 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // En la web publica el navegador no tiene sesion y el backend no siempre
-    // puede resolver el tenant por subdominio (local). El proxy comparte el
-    // slug en esta cookie SOLO en el dominio del tenant, asi que el panel
-    // (app.<dominio>) nunca la envia por error.
+    // El tenant viaja por header.
+    //
+    // El API vive en `api.<dominio>`, asi que el backend NO puede deducir el
+    // tenant del host: la peticion llega desde el navegador a otro dominio. El
+    // proxy escribe `x-tenant-slug` como cookie cuando se sirve la web publica
+    // de un tenant, y aqui la reenviamos.
+    const tenantSlug = readCookie("x-tenant-slug");
+    if (tenantSlug && !config.headers["x-tenant-slug"]) {
+      config.headers["x-tenant-slug"] = tenantSlug;
+    }
   }
   return config;
 });
+
+/**
+ * Lee una cookie del navegador.
+ *
+ * No usamos `document.cookie` parseado a mano porque los valores pueden venir
+ * codificados (el slug se escribe con `encodeURIComponent`).
+ */
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`));
+
+  if (!match) return undefined;
+
+  const value = match.slice(name.length + 1);
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 api.interceptors.response.use(
   (response) => response,

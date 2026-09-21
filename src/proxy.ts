@@ -17,26 +17,87 @@ const PANEL_ROUTE_PREFIXES = ["/editor", "/settings"];
 
 const APP_SUBDOMAIN = "app";
 
+/**
+ * Subdominios que NO son tenants.
+ *
+ * `www` y los de servicio se reservan para la plataforma: si un cliente se
+ * registrara como `www`, romperia el acceso al sitio institucional.
+ */
+const RESERVED_SLUGS = [
+  "www",
+  "app",
+  "api",
+  "admin",
+  "mail",
+  "cdn",
+  "static",
+  "assets",
+];
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hostname = (req.headers.get("host") || "").split(":")[0];
   const token = req.cookies.get("accessToken")?.value;
 
-  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || "multitenant.com";
+  const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN;
 
   // --- Clasificar el host ---
+  //
+  // Ojo: si `NEXT_PUBLIC_APP_DOMAIN` no llega al runtime, TODO host se trataria
+  // como tenant y el panel quedaria inaccesible. Antes habia un default
+  // (`multitenant.com`) que enmascaraba el problema con un dominio equivocado.
   const isLocalhostRoot =
     hostname === "localhost" || hostname === "127.0.0.1";
   const isAppHost =
-    hostname === `app.${appDomain}` ||
-    hostname === `app.localhost` ||
-    hostname === `${APP_SUBDOMAIN}.${appDomain}` ||
-    isLocalhostRoot;
+    isLocalhostRoot ||
+    hostname === "app.localhost" ||
+    hostname.startsWith(`${APP_SUBDOMAIN}.`);
 
-  // El slug es el subdominio del tenant en la web publica.
-  const tenantSlug = isAppHost
-    ? undefined
-    : hostname.replace(`.${appDomain}`, "").replace(".localhost", "");
+  /**
+   * Slug del tenant a partir del subdominio.
+   *
+   * En local: `salud-bienestar.localhost` -> `salud-bienestar`.
+   * En produccion: `salud-bienestar.multitenant.cl` -> `salud-bienestar`.
+   *
+   * Se exige EXACTAMENTE un nivel de subdominio: el apex (`multitenant.cl`) no
+   * es un tenant, y `a.b.multitenant.cl` tampoco. `www` se descarta porque es
+   * el sitio de la plataforma, no una organizacion.
+   */
+  const extractSlug = (): string | undefined => {
+    if (isAppHost) return undefined;
+
+    let candidate: string | undefined;
+
+    if (hostname.endsWith(".localhost")) {
+      candidate = hostname.slice(0, -`.localhost`.length);
+    } else {
+      if (!appDomain) return undefined;
+
+      const suffix = `.${appDomain}`;
+      if (!hostname.endsWith(suffix)) return undefined;
+
+      candidate = hostname.slice(0, -suffix.length);
+    }
+
+    if (!candidate) return undefined;
+
+    // Un solo nivel: descarta apex vacio y subdominios compuestos.
+    if (candidate.includes(".")) return undefined;
+
+    const normalized = candidate.toLowerCase();
+
+    if (RESERVED_SLUGS.includes(normalized)) return undefined;
+
+    return normalized;
+  };
+
+  const tenantSlug = extractSlug();
+
+  // Host desconocido (ni panel ni tenant): devolvemos 404 en vez de renderizar
+  // un sitio vacio que confundiria al visitante.
+  if (!isAppHost && !tenantSlug) {
+    return new NextResponse("Site not found", { status: 404 });
+  }
 
   const isPanelRoute = PANEL_ROUTE_PREFIXES.some((route) =>
     pathname.startsWith(route),
