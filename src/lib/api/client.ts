@@ -1,7 +1,27 @@
 import axios from "axios";
 
+/**
+ * Normaliza la URL del API para que siempre termine en `/api`.
+ *
+ * El backend monta todo bajo el prefijo `/api`, pero la variable de entorno se
+ * escribe a mano en cada entorno (y en Coolify se olvido el sufijo). Depender
+ * de que todos lo recuerden es fragil: mejor lo garantizamos aqui.
+ */
+function resolveApiBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  if (!raw) return "http://localhost:3000/api";
+
+  // Quitamos barras finales para poder concatenar sin duplicar.
+  const withoutTrailingSlash = raw.replace(/\/+$/, "");
+
+  return withoutTrailingSlash.endsWith("/api")
+    ? withoutTrailingSlash
+    : `${withoutTrailingSlash}/api`;
+}
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000",
+  baseURL: resolveApiBaseUrl(),
   headers: {
     "Content-Type": "application/json",
   },
