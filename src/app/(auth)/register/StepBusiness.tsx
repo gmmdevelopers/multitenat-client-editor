@@ -16,7 +16,10 @@ import {
   secondaryButtonClass,
 } from "./fields";
 import {
+  formatPhoneMask,
+  isPhoneComplete,
   isValidRut,
+  PHONE_PREFIX,
   slugify,
   type RegistrationDraft,
 } from "./registration-utils";
@@ -84,6 +87,10 @@ export function StepBusiness({
 
   if (!draft.phone.trim()) {
     errors.phone = "Necesitamos un telefono de contacto.";
+  } else if (!isPhoneComplete(draft.phone)) {
+    // El mensaje dice cuantos digitos faltan en vez de un "invalido" generico:
+    // con una mascara, lo util es saber que esta incompleto.
+    errors.phone = "El telefono debe tener 9 digitos (ej: 9 9999 9999).";
   }
 
   if (!draft.slug) {
@@ -206,17 +213,40 @@ export function StepBusiness({
         />
       </Field>
 
-      <Field label="Telefono" htmlFor="phone" error={fieldError("phone")}>
-        <input
-          id="phone"
-          data-testid="register-phone"
-          type="tel"
-          value={draft.phone}
-          onChange={(e) => onChange({ phone: e.target.value })}
-          onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
-          placeholder="+56 9 1234 5678"
-          className={fieldError("phone") ? inputErrorClass : inputClass}
-        />
+      <Field
+        label="Telefono"
+        htmlFor="phone"
+        error={fieldError("phone")}
+        hint="Celular de contacto para coordinar la configuracion."
+      >
+        <div
+          className={`flex items-stretch overflow-hidden rounded-lg border bg-gray-950 focus-within:border-blue-500 ${
+            fieldError("phone") ? "border-red-500" : "border-gray-800"
+          }`}
+        >
+          {/* El prefijo es fijo y no editable: el producto es solo para Chile,
+              y dejarlo escribir a mano invita a que unos pongan +56 y otros no,
+              ensuciando el dato. */}
+          <span
+            aria-hidden
+            className="flex select-none items-center border-r border-gray-800 px-3 text-sm text-gray-500"
+          >
+            {PHONE_PREFIX}
+          </span>
+          <input
+            id="phone"
+            data-testid="register-phone"
+            type="tel"
+            inputMode="numeric"
+            value={draft.phone}
+            onChange={(e) =>
+              onChange({ phone: formatPhoneMask(e.target.value) })
+            }
+            onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+            placeholder="9 9999 9999"
+            className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none"
+          />
+        </div>
       </Field>
 
       <div>

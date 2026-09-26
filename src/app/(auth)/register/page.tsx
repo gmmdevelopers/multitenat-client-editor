@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { getErrorMessage } from "@/lib/api/errors";
 import {
@@ -13,7 +14,12 @@ import { RegisterProgress } from "./RegisterProgress";
 import { StepAccount } from "./StepAccount";
 import { StepBusiness } from "./StepBusiness";
 import { StepPlan } from "./StepPlan";
-import { INITIAL_DRAFT, type RegistrationDraft } from "./registration-utils";
+import {
+  INITIAL_DRAFT,
+  toNationalDigits,
+  PHONE_PREFIX,
+  type RegistrationDraft,
+} from "./registration-utils";
 
 /**
  * Registro en tres pasos: cuenta, negocio y plan.
@@ -32,6 +38,7 @@ import { INITIAL_DRAFT, type RegistrationDraft } from "./registration-utils";
  * pero el usuario tiene que poder reintentar el pago sin volver a registrarse.
  */
 export default function RegisterPage() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<RegistrationDraft>(INITIAL_DRAFT);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,13 +56,19 @@ export default function RegisterPage() {
     setSubmitError(null);
 
     try {
+      let requiresPayment = true;
+
       if (!registered) {
         const payload: RegisterTenantPayload = {
           name: draft.name.trim(),
           legalName: draft.legalName.trim() || undefined,
           slug: draft.slug,
           taxId: draft.taxId,
-          phone: draft.phone.trim(),
+          // El campo guarda el numero nacional con la mascara (`9 9999 9999`),
+          // pero se envia con el prefijo del pais para que quede consistente con
+          // los tenants existentes (`+56964048872`) y sirva para llamar o enviar
+          // WhatsApp sin tener que adivinar el pais.
+          phone: PHONE_PREFIX + toNationalDigits(draft.phone),
           businessType: draft.businessType,
           requestedPlan: draft.requestedPlan,
           admin: {
@@ -64,6 +77,10 @@ export default function RegisterPage() {
             password: draft.password,
           },
           captchaToken,
+          // Solo se envia si el cliente escribio algo: un campo vacio enviado
+          // como `""` no es lo mismo que omitirlo, y el backend lo trataria como
+          // un cupon presente que no existe.
+          couponCode: draft.couponCode.trim() || undefined,
         };
 
         const result = await registerTenant(payload);
@@ -73,6 +90,16 @@ export default function RegisterPage() {
         localStorage.setItem("accessToken", result.accessToken);
         localStorage.setItem("user", JSON.stringify(result.user));
         setRegistered(true);
+
+        requiresPayment = result.tenant.requiresPayment;
+
+        // El cupon `free_access` ya otorgo el plan sin suscripcion. Se lleva al
+        // panel directamente: crear un checkout aqui suscribiria al cliente a
+        // algo que ya tiene gratis.
+        if (!requiresPayment) {
+          router.replace("/onboarding/site");
+          return;
+        }
       }
 
       const checkout = await createCheckout(

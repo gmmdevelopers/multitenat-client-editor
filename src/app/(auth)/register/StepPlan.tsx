@@ -91,6 +91,19 @@ export function StepPlan({
     onSubmit(captchaToken);
   };
 
+  /**
+   * Normaliza el cupon mientras se escribe.
+   *
+   * El backend compara en mayusculas (`code.trim().toUpperCase()`), asi que
+   * mostrarlo asi evita que el cliente vea un `referido-ana` que "no existe"
+   * cuando en realidad si existe: la diferencia es solo como lo escribio.
+   */
+  const handleCouponChange = (value: string) => {
+    onChange({ couponCode: value.toUpperCase().replace(/\s/g, "") });
+  };
+
+  const hasCoupon = draft.couponCode.trim().length > 0;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="mb-2">
@@ -161,6 +174,30 @@ export function StepPlan({
           cuando se confirme el pago.
         </p>
       </div>
+
+      <Field
+        label="Codigo de cupon (opcional)"
+        htmlFor="couponCode"
+        hint={
+          hasCoupon
+            ? "Al usar un cupon no se aplica la prueba gratuita de 7 dias."
+            : "Si tienes un codigo, escribelo antes de continuar."
+        }
+      >
+        <input
+          id="couponCode"
+          name="couponCode"
+          type="text"
+          value={draft.couponCode}
+          onChange={(event) => handleCouponChange(event.target.value)}
+          disabled={isSubmitting}
+          placeholder="REFERIDO-ANA"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          className={inputClass}
+        />
+      </Field>
 
       <div>
         <span className={labelClass}>Verificacion de seguridad</span>

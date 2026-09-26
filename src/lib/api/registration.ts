@@ -23,6 +23,14 @@ export interface RegisterTenantPayload {
   };
   /** Token de Turnstile resuelto en el navegador. Es de un solo uso. */
   captchaToken: string;
+  /**
+   * Cupon opcional.
+   *
+   * Lo valida el backend dentro del propio registro; se envia tal cual, sin
+   * normalizar aqui. Un `free_access` da el plan sin cobro y un `discount` baja
+   * el precio, pero ambos son EXCLUYENTES con la prueba gratuita.
+   */
+  couponCode?: string;
 }
 
 export interface RegisterTenantResponse {
@@ -33,10 +41,29 @@ export interface RegisterTenantResponse {
     id: string;
     slug: string;
     name: string;
-    /** Plan efectivo: siempre `basic` al registrarse. */
+    /** Plan efectivo al terminar el registro. */
     plan: string;
     /** Plan que el cliente pidio, pendiente de pago. */
     requestedPlan: string | null;
+    /** Fin de la prueba gratuita, si aplica. */
+    trialEndsAt: string | null;
+    planAfterTrial: string | null;
+    onTrial: boolean;
+    /**
+     * Tipo de cupon aplicado, o `null` si no se uso ninguno.
+     *
+     * Lo calcula el backend: el frontend no puede deducirlo del plan, porque
+     * que sea `full` no dice POR QUE (cupon, prueba o pago).
+     */
+    couponType: "discount" | "free_access" | null;
+    /**
+     * Si hay que pasar por el checkout de Mercado Pago.
+     *
+     * `false` solo con un cupon `free_access`: ese cupon ya otorgo el plan sin
+     * suscripcion, asi que mandar al cliente a pagar lo suscribiria a algo que
+     * ya tiene gratis.
+     */
+    requiresPayment: boolean;
   };
   user: {
     id: string;
