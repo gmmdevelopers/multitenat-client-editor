@@ -3,6 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect } from "react";
+import { buildTenantDomain } from "@/lib/tenant-domain";
 
 export default function DashboardLayout({
   children,
@@ -49,7 +50,7 @@ export default function DashboardLayout({
               {tenant.name}
             </p>
             <span className="inline-block mt-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
-              {tenant.slug}.multitenant.com
+              {buildTenantDomain(tenant.slug)}
             </span>
           </div>
 

@@ -23,6 +23,7 @@ import {
   slugify,
   type RegistrationDraft,
 } from "./registration-utils";
+import { buildTenantDomain } from "@/lib/tenant-domain";
 
 interface StepBusinessProps {
   draft: RegistrationDraft;
@@ -273,7 +274,7 @@ export function StepBusiness({
           <p className={hintClass} data-testid="register-slug-preview">
             Tu sitio sera{" "}
             <span className="font-mono text-gray-300">
-              {draft.slug || "mi-negocio"}.multitenant.cl
+              {buildTenantDomain(draft.slug || "mi-negocio")}
             </span>
           </p>
         )}

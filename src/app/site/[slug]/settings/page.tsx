@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { buildTenantDomain } from "@/lib/tenant-domain";
 import {
   AlertCircle,
   CheckCircle2,
@@ -221,9 +222,7 @@ export default function SettingsPage() {
   }
 
   const publicUrl = domain ? `http://${domain}` : "sin dominio configurado";
-  const subdomainUrl = tenant?.slug
-    ? `${tenant.slug}.multitenant.cl`
-    : "multitenant.cl";
+  const subdomainUrl = buildTenantDomain(tenant?.slug ?? "");
   const domainRequest = site?.settings?.domainRequest;
 
   return (
