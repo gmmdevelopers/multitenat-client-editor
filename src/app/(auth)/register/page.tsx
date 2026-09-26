@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { getErrorMessage } from "@/lib/api/errors";
+import { persistToken } from "@/context/AuthContext";
 import {
   createCheckout,
   registerTenant,
@@ -85,10 +86,36 @@ export default function RegisterPage() {
 
         const result = await registerTenant(payload);
 
-        // La sesion se guarda como hace el login: el interceptor la lee de aqui
-        // para el checkout, que exige autenticacion.
-        localStorage.setItem("accessToken", result.accessToken);
-        localStorage.setItem("user", JSON.stringify(result.user));
+        // `persistToken` escribe el token en localStorage Y en la COOKIE. Las dos
+        // hacen falta, y por motivos distintos:
+        //   - localStorage: lo lee el interceptor para las peticiones al API.
+        //   - cookie: la lee el PROXY (`src/proxy.ts`), que es quien decide si
+        //     deja pasar a las rutas del panel.
+        //
+        // Escribir solo en localStorage hacia que el proxy no viera sesion y
+        // mandara a /login justo despues de registrarse, asi que el cliente
+        // nunca llegaba al onboarding.
+        persistToken(result.accessToken);
+
+        // La sesion se guarda con la MISMA forma que la del login, porque
+        // `AuthContext` la lee igual en los dos casos: espera encontrar
+        // `user.tenant` para saber a que organizacion pertenece la sesion.
+        //
+        // El registro devuelve `tenant` como campo HERMANO de `user`, asi que
+        // hay que anidarlo a mano. Guardarlo plano dejaba `tenant` en `null`,
+        // y `/onboarding/site` no podia resolver el tenant.
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ ...result.user, tenant: result.tenant }),
+        );
+
+        // El proxy usa esta cookie para reescribir las rutas del panel al slug
+        // de la organizacion activa. Sin ella, `/onboarding/site` no resuelve
+        // a que tenant pertenece la peticion.
+        document.cookie = `x-org-slug=${encodeURIComponent(
+          result.tenant.slug,
+        )}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+
         setRegistered(true);
 
         requiresPayment = result.tenant.requiresPayment;
