@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BlockInstance } from "@/types/editor-state";
 import { ORGANISMS_MAP } from "@/lib/editor-registry";
 import { useEditorStore } from "@/hooks/useEditorStore";
@@ -78,6 +78,74 @@ export function PropertiesPanel({
 
   // Obtenemos los bloques del lienzo para generar las anclas de sección
   const blocks = useEditorStore((state) => state.blocks);
+  const focusedFieldKey = useEditorStore((state) => state.focusedFieldKey);
+  const focusRequestId = useEditorStore((state) => state.focusRequestId);
+
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * Resalta y scrollea hasta el input del campo pulsado en el canvas.
+   *
+   * Se ejecuta con `focusRequestId` (y no con `focusedFieldKey`) para que un
+   * segundo click sobre el MISMO texto vuelva a scrollear: si dependiera solo
+   * del nombre del campo, repetir el click no cambiaria nada y no habria
+   * scroll.
+   *
+   * El desplazamiento se calcula a mano sobre el contenedor del panel. No se
+   * usa `scrollIntoView` porque desplazaria tambien el canvas: los dos paneles
+   * comparten el scroll de la pagina y el bloque seleccionado se saldria de
+   * vista.
+   *
+   * Se reintenta en varios frames porque el panel y sus campos pueden no estar
+   * montados todavia: el cliente puede hacer click en un texto de un bloque que
+   * aun no estaba seleccionado, y en ese render el `<aside>` del panel de
+   * propiedades se acaba de crear. Un unico `requestAnimationFrame` corria
+   * antes de que el DOM tuviera el input, y el scroll se perdia en silencio.
+   */
+  useEffect(() => {
+    if (!focusedFieldKey) return;
+
+    let frame = 0;
+    let attempts = 0;
+
+    const MAX_ATTEMPTS = 20; // ~330 ms a 60 fps
+
+    const tryScroll = () => {
+      const panel = panelRef.current;
+      const input = panel?.querySelector<HTMLElement>(
+        `[data-field-key="${CSS.escape(focusedFieldKey)}"]`,
+      );
+
+      if (!panel || !input) {
+        // El panel aun no esta listo; se reintenta en el siguiente frame.
+        if (attempts < MAX_ATTEMPTS) {
+          attempts += 1;
+          frame = requestAnimationFrame(tryScroll);
+        }
+        return;
+      }
+
+      const panelRect = panel.getBoundingClientRect();
+      const inputRect = input.getBoundingClientRect();
+
+      const isVisible =
+        inputRect.top >= panelRect.top && inputRect.bottom <= panelRect.bottom;
+
+      if (isVisible) return;
+
+      // Se centra el campo en el panel, sin pasarse del principio ni del final.
+      const target =
+        panel.scrollTop +
+        (inputRect.top - panelRect.top) -
+        (panelRect.height - inputRect.height) / 2;
+
+      panel.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+    };
+
+    frame = requestAnimationFrame(tryScroll);
+
+    return () => cancelAnimationFrame(frame);
+  }, [focusedFieldKey, focusRequestId]);
 
   if (!selectedBlock) {
     return (
@@ -162,11 +230,26 @@ export function PropertiesPanel({
     value: any,
     onChange: (newValue: any) => void,
     locationKey: string,
-  ) => (
-    <div key={locationKey} className="flex flex-col">
-      {renderFieldContent(key, value, onChange, locationKey)}
-    </div>
-  );
+  ) => {
+    const isFocused = focusedFieldKey === locationKey;
+
+    return (
+      <div
+        key={locationKey}
+        // El `locationKey` es la ruta que resuelve el canvas al hacer click
+        // sobre un texto. Se expone en el DOM para que el panel pueda encontrar
+        // este input y scrollear hasta el.
+        data-field-key={locationKey}
+        className={`flex flex-col rounded-lg transition-all ${
+          isFocused
+            ? "bg-amber-400/10 ring-1 ring-amber-400/60 p-1.5 -m-1.5"
+            : ""
+        }`}
+      >
+        {renderFieldContent(key, value, onChange, locationKey)}
+      </div>
+    );
+  };
 
   const renderFieldContent = (
     key: string,
@@ -374,7 +457,10 @@ export function PropertiesPanel({
   for (const group of meta?.groups ?? []) collectLabels(group.fields);
 
   return (
-    <aside className="w-80 border-l border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
+    <aside
+      ref={panelRef}
+      className="w-80 border-l border-stone-800 bg-stone-900/50 p-4 overflow-y-auto"
+    >
       <div className="mb-4 border-b border-stone-800 pb-3">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
           Editando
@@ -392,7 +478,12 @@ export function PropertiesPanel({
             return (
               <div
                 key={propName}
-                className="flex flex-col gap-2 rounded-xl border border-stone-800 bg-stone-950/50 p-3"
+                data-field-key={propName}
+                className={`flex flex-col gap-2 rounded-xl border p-3 transition-all ${
+                  focusedFieldKey === propName
+                    ? "border-amber-400/60 bg-amber-400/5"
+                    : "border-stone-800 bg-stone-950/50"
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">

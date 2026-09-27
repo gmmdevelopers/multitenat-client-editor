@@ -23,6 +23,7 @@ import { ORGANISMS_MAP } from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "./connected-organisms";
 import { BlockInstance } from "@/types/editor-state";
 import { ViewportMode } from "./ViewportSelector";
+import { pathToLocationKey, resolveFieldPath } from "@/utils/field-resolver";
 
 interface CanvasProps {
   blocks: BlockInstance[];
@@ -34,6 +35,8 @@ interface CanvasProps {
   onDeleteBlock: (id: string) => void;
   onResetBlock: (id: string) => void;
   onReorderBlocks: (activeId: string, overId: string) => void;
+  /** Resalta el campo del panel que corresponde al elemento clickeado. */
+  onFocusField: (fieldKey: string | null) => void;
 }
 
 function SortableBlock({
@@ -42,12 +45,14 @@ function SortableBlock({
   onSelectBlock,
   onDeleteBlock,
   onResetBlock,
+  onFocusField,
 }: {
   block: BlockInstance;
   isSelected: boolean;
   onSelectBlock: (id: string) => void;
   onDeleteBlock: (id: string) => void;
   onResetBlock: (id: string) => void;
+  onFocusField: (fieldKey: string | null) => void;
 }) {
   const {
     attributes,
@@ -114,6 +119,34 @@ function SortableBlock({
   const Component =
     CONNECTED_ORGANISMS[block.metaName] ?? registryEntry.component;
 
+  /**
+   * Click en el bloque: selecciona y, si se pulso sobre un texto concreto,
+   * resalta su campo en el panel de propiedades.
+   *
+   * Se usa el elemento REAL del click (`event.target`) y no el bloque: el
+   * cliente puede haber pulsado el `<h1>` del titulo o un `<p>` de la
+   * descripcion, y cada uno corresponde a una prop distinta.
+   *
+   * Los botones flotantes (arrastrar, reset, eliminar) ya hacen
+   * `stopPropagation`, asi que no llegan aqui.
+   */
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    onSelectBlock(block.id);
+
+    const target = event.target as HTMLElement | null;
+
+    // El propio contenedor del bloque (el anillo de seleccion) no es un campo:
+    // pulsarlo solo selecciona, sin resaltar nada.
+    if (!target || target === event.currentTarget) {
+      onFocusField(null);
+      return;
+    }
+
+    const path = resolveFieldPath(target, block);
+
+    onFocusField(path ? pathToLocationKey(path) : null);
+  };
+
   return (
     <div
       ref={(node) => {
@@ -121,7 +154,7 @@ function SortableBlock({
         rootRef.current = node;
       }}
       style={style}
-      onClick={() => onSelectBlock(block.id)}
+      onClick={handleClick}
       className={`group relative cursor-pointer rounded-none transition-all ${
         isSelected
           ? "ring-2 ring-amber-400 z-10"
@@ -178,6 +211,7 @@ export function Canvas({
   onDeleteBlock,
   onResetBlock,
   onReorderBlocks,
+  onFocusField,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -246,6 +280,7 @@ export function Canvas({
                 onSelectBlock={onSelectBlock}
                 onDeleteBlock={onDeleteBlock}
                 onResetBlock={onResetBlock}
+                onFocusField={onFocusField}
               />
             ))}
           </SortableContext>

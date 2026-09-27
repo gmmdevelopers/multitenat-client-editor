@@ -112,6 +112,7 @@ export default function PageBuilderPage() {
     selectedBlockId,
     loadBlocks,
     setSelectedBlockId,
+    focusField,
     addOrganism,
     updateBlockProp,
     resetBlockProps,
@@ -538,6 +539,7 @@ export default function PageBuilderPage() {
           onDeleteBlock={deleteBlock}
           onResetBlock={resetBlockProps}
           onReorderBlocks={reorderBlocksById}
+          onFocusField={focusField}
         />
 
         {/* Sidebar Derecho */}

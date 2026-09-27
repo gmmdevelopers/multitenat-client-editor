@@ -17,10 +17,21 @@ function generateUniqueId(): string {
 interface EditorStore {
   blocks: BlockInstance[];
   selectedBlockId: string | null;
+  /**
+   * Campo resaltado en el panel de propiedades, en forma de `locationKey`
+   * (`title`, `metrics-0-label`).
+   *
+   * Se llena al hacer click sobre un texto del canvas y hace que el panel
+   * resalte ese input y scrollee hasta el. `null` = sin resaltado.
+   */
+  focusedFieldKey: string | null;
+  /** Contador que se incrementa en cada click, incluso si el campo es el mismo. */
+  focusRequestId: number;
   /** Pagina que se esta editando; la usa el preview para no mostrar otra. */
   pageId: string | null;
   loadBlocks: (blocks: BlockInstance[], pageId?: string | null) => void;
   setSelectedBlockId: (id: string | null) => void;
+  focusField: (fieldKey: string | null) => void;
   addOrganism: (metaName: string) => void;
   updateBlockProp: (blockId: string, propName: string, value: any) => void;
   resetBlockProps: (blockId: string) => void;
@@ -34,6 +45,8 @@ export const useEditorStore = create<EditorStore>()(
     (set) => ({
       blocks: [],
       selectedBlockId: null,
+      focusedFieldKey: null,
+      focusRequestId: 0,
       pageId: null,
 
       // Normalizamos lo que llega de la API: un bloque sin `props` es una
@@ -52,6 +65,20 @@ export const useEditorStore = create<EditorStore>()(
         }),
 
       setSelectedBlockId: (id) => set({ selectedBlockId: id }),
+
+      /**
+       * Resalta un campo del panel y pide scrollear hasta el.
+       *
+       * `focusRequestId` se incrementa SIEMPRE, aunque el campo sea el mismo:
+       * el panel escucha ese contador para repetir el scroll cuando el cliente
+       * vuelve a hacer click en el mismo texto (si dependiera de `fieldKey`,
+       * el segundo click no cambiaria nada y no habria scroll).
+       */
+      focusField: (fieldKey) =>
+        set((state) => ({
+          focusedFieldKey: fieldKey,
+          focusRequestId: state.focusRequestId + 1,
+        })),
 
       addOrganism: (metaName) =>
         set((state) => {
