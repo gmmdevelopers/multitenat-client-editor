@@ -154,8 +154,32 @@ export function resolveFieldPath(
 
   const textPaths = collectTextPaths(props as Record<string, unknown>);
 
-  // 2. Imagenes: se comparan por `src`.
+  // 2. TEXTO: el caso principal.
+  //
+  // Va ANTES que el `href` a proposito. Un enlace tiene las dos cosas (el texto
+  // visible "Appointment" y su `href` "/appointment"), y el cliente pulsa el
+  // TEXTO: resaltar la URL seria desconcertante, porque el campo que espera
+  // editar es la etiqueta, no el destino.
+  const elementText = normalizeText(element.textContent ?? "");
+
+  if (elementText) {
+    const candidates = [...textPaths.entries()].filter(
+      ([, text]) => text === elementText,
+    );
+
+    if (candidates.length === 1) return candidates[0][0];
+
+    if (candidates.length > 1) {
+      // Empate: se elige el que mejor encaja con el elemento.
+      return candidates
+        .map(([path]) => ({ path, score: scorePath(path, element) }))
+        .sort((a, b) => b.score - a.score)[0].path;
+    }
+  }
+
+  // 3. Imagenes: se comparan por `src` (no tienen texto propio).
   const tag = element.tagName.toLowerCase();
+
   if (tag === "img") {
     const src = element.getAttribute("src") ?? "";
     for (const [path, value] of Object.entries(props)) {
@@ -165,7 +189,7 @@ export function resolveFieldPath(
     }
   }
 
-  // 3. Enlaces y botones: por `href`.
+  // 4. Enlaces SIN texto propio (un icono dentro de un `<a>`): por `href`.
   if (tag === "a") {
     const href = element.getAttribute("href") ?? "";
     for (const [path, value] of Object.entries(props)) {
@@ -175,19 +199,5 @@ export function resolveFieldPath(
     }
   }
 
-  // 4. Texto: el caso principal.
-  const elementText = normalizeText(element.textContent ?? "");
-  if (!elementText) return null;
-
-  const candidates = [...textPaths.entries()].filter(
-    ([, text]) => text === elementText,
-  );
-
-  if (candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0][0];
-
-  // Empate: se elige el que mejor encaja con el elemento.
-  return candidates
-    .map(([path]) => ({ path, score: scorePath(path, element) }))
-    .sort((a, b) => b.score - a.score)[0].path;
+  return null;
 }

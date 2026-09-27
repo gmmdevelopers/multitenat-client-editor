@@ -131,6 +131,21 @@ function SortableBlock({
    * `stopPropagation`, asi que no llegan aqui.
    */
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    // En modo edicion, un enlace o boton del componente NO debe navegar ni
+    // disparar su accion: el cliente esta editando, no usando el sitio. Sin
+    // esto, pulsar el CTA del hero lo sacaba del editor a la pagina de destino.
+    //
+    // Se cancela ANTES de nada para que ningun handler del componente llegue a
+    // ejecutarse: el objetivo del click es seleccionar, no navegar.
+    const interactive = (event.target as HTMLElement | null)?.closest(
+      "a, button, [role='button']",
+    );
+
+    if (interactive) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     onSelectBlock(block.id);
 
     const target = event.target as HTMLElement | null;
@@ -142,7 +157,12 @@ function SortableBlock({
       return;
     }
 
-    const path = resolveFieldPath(target, block);
+    // Para un enlace o boton, el texto util no esta en el elemento pulsado
+    // (que puede ser un `<span>` interno): se sube al contenedor interactivo,
+    // cuyo `textContent` es el que el cliente ve y el que corresponde a la prop
+    // de la etiqueta (`primaryCtaLabel`).
+    const fieldTarget = interactive ?? target;
+    const path = resolveFieldPath(fieldTarget as HTMLElement, block);
 
     onFocusField(path ? pathToLocationKey(path) : null);
   };
