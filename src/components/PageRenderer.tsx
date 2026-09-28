@@ -6,6 +6,7 @@ import {
 } from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "@/components/editor/connected-organisms";
 import { BlockInstance } from "@/types/editor-state";
+import { transformImagesInProps } from "@/lib/image-transform";
 
 interface PageRendererProps {
   blocks: BlockInstance[];
@@ -52,7 +53,15 @@ export function PageRenderer({ blocks }: PageRendererProps) {
           ...(block.props ?? {}),
         };
 
-        return <Component key={block.id} {...props} />;
+        // Optimizacion de imagenes SOLO aqui, en la web publica: el editor las
+        // muestra tal cual porque su objetivo es elegir, no servir trafico.
+        //
+        // `transformImagesInProps` devuelve el valor intacto cuando la imagen no
+        // es del bucket propio (una de Unsplash, por ejemplo): esas no estan en
+        // la zona de Cloudflare y `/cdn-cgi/image` les daria 404.
+        const transformedProps = transformImagesInProps(props);
+
+        return <Component key={block.id} {...transformedProps} />;
       })}
     </div>
   );
