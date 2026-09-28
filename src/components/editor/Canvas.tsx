@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -65,6 +65,63 @@ function SortableBlock({
 
   const rootRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * Elemento del canvas resaltado, para dibujarle un contorno.
+   *
+   * Se guarda el nodo del DOM y no una prop porque el componente del design
+   * system es una caja negra: no expone sus elementos internos, asi que el
+   * unico modo de resaltar el `<h1>` concreto es tocar su estilo directamente.
+   */
+  const [highlightedElement, setHighlightedElement] = useState<HTMLElement | null>(
+    null,
+  );
+
+  /**
+   * Dibuja el contorno sobre el elemento resaltado y lo quita al cambiar.
+   *
+   * Se aplica un `outline` (y no `border`) porque el outline NO ocupa espacio
+   * en el layout: con un border, resaltar un texto desplazaria el contenido del
+   * componente y el canvas daria un salto en cada click.
+   *
+   * `outlineOffset` separa el contorno del texto para que se lea bien en
+   * elementos con padding ajustado.
+   */
+  useEffect(() => {
+    if (!highlightedElement) return;
+
+    const previous = {
+      outline: highlightedElement.style.outline,
+      outlineOffset: highlightedElement.style.outlineOffset,
+      borderRadius: highlightedElement.style.borderRadius,
+      transition: highlightedElement.style.transition,
+    };
+
+    highlightedElement.style.outline = "2px solid rgb(251 191 36)"; // amber-400
+    highlightedElement.style.outlineOffset = "2px";
+    highlightedElement.style.borderRadius = "2px";
+    highlightedElement.style.transition = "outline 120ms ease-out";
+
+    return () => {
+      // Se restauran los valores ANTERIORES y no se vacian: el componente puede
+      // traer sus propios estilos en linea (el hero pinta borderRadius), y
+      // borrarlos le cambiaria el diseño.
+      highlightedElement.style.outline = previous.outline;
+      highlightedElement.style.outlineOffset = previous.outlineOffset;
+      highlightedElement.style.borderRadius = previous.borderRadius;
+      highlightedElement.style.transition = previous.transition;
+    };
+  }, [highlightedElement]);
+
+  /**
+   * El resaltado se limpia cuando este bloque deja de estar seleccionado.
+   *
+   * Sin esto, al seleccionar otro bloque el contorno se quedaria en el canvas
+   * señalando un elemento de una seccion que ya no se esta editando.
+   */
+  useEffect(() => {
+    if (!isSelected) setHighlightedElement(null);
+  }, [isSelected]);
+
   // Al agregar un organismo queda seleccionado, asi que scrolleamos a el.
   //
   // No usamos `scrollIntoView`: el canvas aplica `transform: scale()` para el
@@ -120,8 +177,8 @@ function SortableBlock({
     CONNECTED_ORGANISMS[block.metaName] ?? registryEntry.component;
 
   /**
-   * Click en el bloque: selecciona y, si se pulso sobre un texto concreto,
-   * resalta su campo en el panel de propiedades.
+   * Click en el bloque: selecciona, resalta el elemento pulsado y enfoca su
+   * campo en el panel de propiedades.
    *
    * Se usa el elemento REAL del click (`event.target`) y no el bloque: el
    * cliente puede haber pulsado el `<h1>` del titulo o un `<p>` de la
@@ -153,6 +210,7 @@ function SortableBlock({
     // El propio contenedor del bloque (el anillo de seleccion) no es un campo:
     // pulsarlo solo selecciona, sin resaltar nada.
     if (!target || target === event.currentTarget) {
+      setHighlightedElement(null);
       onFocusField(null);
       return;
     }
@@ -161,8 +219,13 @@ function SortableBlock({
     // (que puede ser un `<span>` interno): se sube al contenedor interactivo,
     // cuyo `textContent` es el que el cliente ve y el que corresponde a la prop
     // de la etiqueta (`primaryCtaLabel`).
-    const fieldTarget = interactive ?? target;
-    const path = resolveFieldPath(fieldTarget as HTMLElement, block);
+    const fieldTarget = (interactive ?? target) as HTMLElement;
+    const path = resolveFieldPath(fieldTarget, block);
+
+    // El resaltado del canvas sigue al mismo elemento que se enfoca en el
+    // panel: si el resolver no encontro prop, no se resalta nada, para que las
+    // dos vistas no digan cosas distintas.
+    setHighlightedElement(path ? fieldTarget : null);
 
     onFocusField(path ? pathToLocationKey(path) : null);
   };
