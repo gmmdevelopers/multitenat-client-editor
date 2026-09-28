@@ -14,7 +14,8 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
-import { isColorProp, isIconProp, isLinkProp } from "@/utils/InputsTypeHelper";
+import { isColorProp, isIconProp, isImageProp, isLinkProp } from "@/utils/InputsTypeHelper";
+import { ImagePickerModal } from "./ImagePickerModal";
 
 interface PropertiesPanelProps {
   selectedBlock: BlockInstance | undefined;
@@ -75,6 +76,13 @@ export function PropertiesPanel({
   const [activeIconProp, setActiveIconProp] = useState<{
     propName: string;
   } | null>(null);
+  /**
+   * Campo de imagen con el selector abierto (`locationKey`).
+   *
+   * Se guarda la clave y no la prop: el campo puede estar dentro de un item de
+   * array (`images-0-src`), y al elegir hay que actualizar ESE item.
+   */
+  const [imagePickerField, setImagePickerField] = useState<string | null>(null);
 
   // Obtenemos los bloques del lienzo para generar las anclas de sección
   const blocks = useEditorStore((state) => state.blocks);
@@ -361,7 +369,43 @@ export function PropertiesPanel({
       );
     }
 
-    // 3. Control de Color
+    // 3. Selector de IMAGEN
+    //
+    // Va antes que el color: `heroImageSrc` y `backgroundColor` comparten
+    // forma (una cadena), y sin este orden el primero caeria en el control de
+    // color.
+    if (isImageProp(key, value)) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-medium capitalize text-stone-400">
+            {fieldLabels.get(key) ?? key}
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setImagePickerField(locationKey)}
+            className="group relative flex h-24 w-full items-center justify-center overflow-hidden rounded-lg border border-stone-800 bg-stone-950 transition hover:border-amber-400"
+          >
+            {value ? (
+              <img
+                src={String(value)}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-[11px] text-stone-500">Sin imagen</span>
+            )}
+
+            <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[11px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+              Cambiar
+            </span>
+          </button>
+        </div>
+      );
+    }
+
+    // 4. Control de Color
     if (isColorProp(key, value)) {
       const colorValue = typeof value === "string" ? value : "";
       const hexColor = colorValue.startsWith("#") ? colorValue : "#000000";
@@ -402,8 +446,7 @@ export function PropertiesPanel({
     }
 
     // 4. Booleano
-    if (typeof value === "boolean") {
-      return (
+    if (typeof value === "boolean") {      return (
         <div className="flex items-center justify-between py-1">
           <label className="text-xs font-medium capitalize text-stone-300">
             {key}
@@ -419,8 +462,7 @@ export function PropertiesPanel({
     }
 
     // 5. Input Estándar
-    return (
-      <div className="flex flex-col gap-1">
+    return (      <div className="flex flex-col gap-1">
         <label className="text-[10px] font-medium text-stone-400">
           {fieldLabels.get(key) ?? key}
         </label>
@@ -582,6 +624,108 @@ export function PropertiesPanel({
           );
         })}
       </div>
+
+      {/* Selector de imagenes. Se monta al final para que el modal quede por
+          encima del panel, sin depender del orden de los elementos. */}
+      {imagePickerField && selectedBlock ? (
+        <ImagePickerModal
+          currentUrl={String(
+            readValueByLocationKey(props, imagePickerField) ?? "",
+          )}
+          onSelect={(url) =>
+            writeValueByLocationKey(
+              props,
+              imagePickerField,
+              selectedBlock.id,
+              onUpdateProp,
+              url,
+            )
+          }
+          onClose={() => setImagePickerField(null)}
+        />
+      ) : null}
     </aside>
   );
+}
+
+/**
+ * Lee el valor de un campo a partir de su `locationKey`.
+ *
+ * El panel identifica los campos con claves aplanadas (`images-0-src`) porque
+ * asi puede resaltarlos en el DOM. Para leer o escribir hay que volver a la
+ * estructura real (`props.images[0].src`), y ahi es donde aparece la ambiguedad:
+ * los guiones pueden venir del nombre de la prop o del separador del indice.
+ *
+ * Se resuelve recorriendo los arrays conocidos: es determinista porque se
+ * comparan las claves REALES de los props, no se adivina cortando por guiones.
+ */
+function readValueByLocationKey(
+  props: Record<string, any>,
+  locationKey: string,
+): unknown {
+  // Campo de primer nivel.
+  if (locationKey in props) return props[locationKey];
+
+  for (const [propName, propValue] of Object.entries(props)) {
+    if (!Array.isArray(propValue)) continue;
+
+    const prefix = `${propName}-`;
+    if (!locationKey.startsWith(prefix)) continue;
+
+    const rest = locationKey.slice(prefix.length);
+    const [indexText, ...subKeyParts] = rest.split("-");
+    const index = Number(indexText);
+
+    if (!Number.isInteger(index) || !propValue[index]) continue;
+
+    const subKey = subKeyParts.join("-");
+
+    return subKey ? propValue[index][subKey] : propValue[index];
+  }
+
+  return undefined;
+}
+
+/**
+ * Escribe el valor de un campo a partir de su `locationKey`.
+ *
+ * Reutiliza los mismos callbacks que usa el panel (`onUpdateProp` para el primer
+ * nivel, reconstruyendo el array para los items), para que el cambio del modal
+ * pase por el MISMO camino que el de un input normal: si se escribiera aparte,
+ * el guardado y el historial podrian divergir.
+ */
+function writeValueByLocationKey(
+  props: Record<string, any>,
+  locationKey: string,
+  blockId: string,
+  onUpdateProp: (blockId: string, propName: string, value: any) => void,
+  value: unknown,
+): void {
+  if (locationKey in props) {
+    onUpdateProp(blockId, locationKey, value);
+    return;
+  }
+
+  for (const [propName, propValue] of Object.entries(props)) {
+    if (!Array.isArray(propValue)) continue;
+
+    const prefix = `${propName}-`;
+    if (!locationKey.startsWith(prefix)) continue;
+
+    const rest = locationKey.slice(prefix.length);
+    const [indexText, ...subKeyParts] = rest.split("-");
+    const index = Number(indexText);
+
+    if (!Number.isInteger(index) || !propValue[index]) continue;
+
+    const subKey = subKeyParts.join("-");
+    const nextArray = [...propValue];
+
+    nextArray[index] = subKey
+      ? { ...nextArray[index], [subKey]: value }
+      : value;
+
+    onUpdateProp(blockId, propName, nextArray);
+    return;
+  }
 }
