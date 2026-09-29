@@ -6,8 +6,10 @@ import { Trash2, Upload, ImageIcon, X, Check } from "lucide-react";
 import { getErrorMessage } from "@/lib/api/errors";
 import {
   deleteUpload,
+  getImageUsage,
   listUploads,
   uploadImageFile,
+  type ImageUsage,
   type TenantImage,
 } from "@/lib/api/uploads";
 import { getDefaultImages, type DefaultImage } from "@/lib/default-images";
@@ -44,6 +46,10 @@ export function ImagePickerModal({
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  /** Imagen que se esta borrando, para deshabilitar su boton mientras tanto. */
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** Mensaje tras una accion (borrado que afecto a paginas). */
+  const [notice, setNotice] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -100,16 +106,39 @@ export function ImagePickerModal({
   };
 
   const handleDelete = async (id: string) => {
-    const confirmed = window.confirm(
-      "Quitar esta imagen de tu galeria?\n\nLas paginas que la usen mostraran la imagen por defecto del bloque.",
-    );
-    if (!confirmed) return;
+    // Se consulta el uso ANTES de preguntar: el aviso debe decir a que afecta
+    // ("esta en 2 paginas publicadas") en vez de un "¿seguro?" a ciegas.
+    let usage: ImageUsage | null = null;
 
     try {
-      await deleteUpload(id);
+      usage = await getImageUsage(id);
+    } catch {
+      // Si falla la consulta se sigue adelante con un aviso generico: no poder
+      // comprobar el uso no debe impedir borrar.
+    }
+
+    const confirmed = window.confirm(buildDeleteMessage(usage));
+    if (!confirmed) return;
+
+    setDeletingId(id);
+
+    try {
+      const result = await deleteUpload(id);
       setImages((current) => current.filter((image) => image.id !== id));
+
+      // Se le dice que paso, no solo que se borro: si la imagen estaba en
+      // paginas publicadas, el cliente vera su web distinta y debe saber por que.
+      if (result.affectedPages.length > 0) {
+        setNotice(
+          `Imagen eliminada. En ${result.affectedPages.length} pagina(s) se vera la imagen por defecto: ${result.affectedPages
+            .map((page) => page.path)
+            .join(", ")}`,
+        );
+      }
     } catch (caught) {
       setError(getErrorMessage(caught, "No pudimos eliminarla."));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -158,6 +187,12 @@ export function ImagePickerModal({
             className="mx-5 mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
           >
             {error}
+          </div>
+        ) : null}
+
+        {notice ? (
+          <div className="mx-5 mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            {notice}
           </div>
         ) : null}
 
@@ -221,6 +256,7 @@ export function ImagePickerModal({
                         onClose();
                       }}
                       onDelete={() => void handleDelete(image.id)}
+                      isDeleting={deletingId === image.id}
                     />
                   ))}
                 </div>
@@ -283,12 +319,14 @@ function ImageTile({
   selected,
   onSelect,
   onDelete,
+  isDeleting,
 }: {
   url: string;
   label: string;
   selected: boolean;
   onSelect: () => void;
   onDelete?: () => void;
+  isDeleting?: boolean;
 }) {
   return (
     <div className="group relative">
@@ -324,12 +362,44 @@ function ImageTile({
         <button
           type="button"
           onClick={onDelete}
+          disabled={isDeleting}
           title="Quitar de mi galeria"
-          className="absolute left-1.5 top-1.5 hidden rounded bg-black/70 p-1 text-stone-300 transition hover:bg-red-600 hover:text-white group-hover:block"
+          className="absolute left-1.5 top-1.5 hidden rounded bg-black/70 p-1 text-stone-300 transition hover:bg-red-600 hover:text-white group-hover:block disabled:opacity-50"
         >
           <Trash2 className="h-3 w-3" />
         </button>
       ) : null}
     </div>
   );
+}
+
+/**
+ * Mensaje del `confirm` antes de borrar.
+ *
+ * Se construye con el uso real de la imagen: "esta en 2 paginas" es una
+ * decision informada, un "¿seguro?" no lo es. Cuando no se pudo consultar el
+ * uso, se cae a un aviso generico en vez de bloquear el borrado.
+ */
+function buildDeleteMessage(usage: ImageUsage | null): string {
+  if (!usage || usage.totalPages === 0) {
+    return "Quitar esta imagen de tu galeria?\n\nNo la esta usando ninguna pagina.";
+  }
+
+  const publicadas = usage.usedIn.filter((page) => page.isPublished);
+  const lineas = usage.usedIn
+    .map((page) => `  - ${page.path}${page.isPublished ? " (publicada)" : " (borrador)"}`)
+    .join("\n");
+
+  const consecuencia = publicadas.length
+    ? `En ${publicadas.length} pagina(s) PUBLICADA(S) se vera la imagen por defecto del bloque: el cambio es visible en tu web ahora mismo.`
+    : "Las paginas que la usan mostraran la imagen por defecto del bloque.";
+
+  return [
+    "Quitar esta imagen de tu galeria?",
+    "",
+    `Se usa en ${usage.totalPages} pagina(s):`,
+    lineas,
+    "",
+    consecuencia,
+  ].join("\n");
 }

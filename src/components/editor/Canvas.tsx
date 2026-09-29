@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { RotateCcw } from "lucide-react";
 
-import { ORGANISMS_MAP } from "@/lib/editor-registry";
+import { ORGANISMS_MAP, getDefaultPropsForOrganism } from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "./connected-organisms";
 import { BlockInstance } from "@/types/editor-state";
 import { ViewportMode } from "./ViewportSelector";
@@ -254,7 +254,23 @@ function SortableBlock({
         ⋮⋮
       </div>
 
-      <Component {...block.props} />
+      {/*
+        Los defaults del meta se MEZCLAN con las props del bloque, igual que
+        hace el PageRenderer en la web publica.
+
+        Sin esto, un bloque con props incompletas pasaba en la web publica pero
+        TUMBABA el editor: el componente hacia `.map()` sobre una prop que no
+        existia. Ocurría con bloques editados por API, migrados, o con una prop
+        borrada, y el fallo no era de un bloque: se caia la pantalla entera del
+        editor y el cliente no podia seguir trabajando.
+
+        Las props del bloque ganan sobre el default, asi que lo que el cliente
+        haya editado nunca se pisa.
+      */}
+      <Component
+        {...getDefaultPropsForOrganism(block.metaName)}
+        {...block.props}
+      />
 
       {/* Botones de acción flotantes (Reset + Eliminar) */}
       <div className="absolute right-4 top-4 z-20 hidden gap-1.5 group-hover:flex">

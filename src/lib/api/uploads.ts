@@ -63,8 +63,35 @@ export async function confirmUpload(payload: {
 }
 
 /** Quitar una imagen de la galeria (borra tambien el objeto del bucket). */
-export async function deleteUpload(id: string): Promise<void> {
-  await api.delete(`/uploads/${id}`);
+export async function deleteUpload(id: string): Promise<{
+  id: string;
+  deleted: boolean;
+  /** Paginas que la usaban y mostraran la imagen por defecto del bloque. */
+  affectedPages: { path: string; title: string; isPublished: boolean }[];
+}> {
+  const { data } = await api.delete(`/uploads/${id}`);
+  return data;
+}
+
+/** En que paginas se usa una imagen, para avisar antes de borrarla. */
+export interface ImageUsage {
+  image: { id: string; fileName: string; url: string };
+  usedIn: {
+    pageId: string;
+    path: string;
+    title: string;
+    isPublished: boolean;
+    isDraft: boolean;
+    isHistorical: boolean;
+  }[];
+  /** Si alguna pagina publicada la usa, el cambio se ve en la web ya. */
+  affectsPublishedPages: boolean;
+  totalPages: number;
+}
+
+export async function getImageUsage(id: string): Promise<ImageUsage> {
+  const { data } = await api.get<ImageUsage>(`/uploads/${id}/usage`);
+  return data;
 }
 
 /**

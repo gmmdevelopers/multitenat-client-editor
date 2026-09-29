@@ -55,18 +55,18 @@ export function EditorToolbar({
       </div>
       <div className="flex items-center">
         <button
-          onClick={handleSaveDraft}
-          className="mr-2 rounded-xl bg-amber-400 px-4 py-1.5 text-xs font-bold text-black transition hover:bg-amber-300"
-        >
-          Guardar Borrador
-        </button>
-        <button
           onClick={handlePreview}
           className="mr-2 flex items-center gap-1.5 rounded-xl border-stone-700 px-4 py-1.5 text-xs font-bold text-stone-200 transition hover:border-stone-600 hover:bg-stone-800 hover:text-white"
           title="Ver el borrador en una pestaña nueva"
         >
           <ExternalLink className="h-3.5 w-3.5" />
           Vista Previa
+        </button>
+        <button
+          onClick={handleSaveDraft}
+          className="mr-2 rounded-xl bg-amber-400 px-4 py-1.5 text-xs font-bold text-black transition hover:bg-amber-300"
+        >
+          Guardar Borrador
         </button>
         <button
           onClick={handlePublishPage}
