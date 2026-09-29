@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect } from "react";
 import { buildTenantDomain } from "@/lib/tenant-domain";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 
 export default function DashboardLayout({
   children,
@@ -92,6 +93,11 @@ export default function DashboardLayout({
           hace scrolleable el contenido largo (por ejemplo Configuración) sin
           tocar el sidebar, que queda fijo. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-gray-900">
+        {/* Aviso de correo sin confirmar. Va arriba del todo y fuera del hijo,
+            para que aparezca en todas las pantallas del panel sin que cada una
+            tenga que acordarse de incluirlo. */}
+        <EmailVerificationBanner />
+
         {children}
       </div>
     </div>

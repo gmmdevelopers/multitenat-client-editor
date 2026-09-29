@@ -12,7 +12,7 @@ import type { NextRequest } from "next/server";
  * dos cosas distintas (editor para el cliente, web para el visitante).
  */
 
-const PUBLIC_AUTH_ROUTES = ["/login", "/register"];
+const PUBLIC_AUTH_ROUTES = ["/login", "/register", "/verify-email"];
 const PANEL_ROUTE_PREFIXES = ["/editor", "/settings"];
 
 const APP_SUBDOMAIN = "app";
@@ -121,6 +121,10 @@ export function proxy(req: NextRequest) {
     // Rebortar al editor cuando la cookie existe provocaba un bucle: token
     // invalido -> /login -> /editor -> 401 -> /login... Si ya hay una sesion
     // valida, la propia pagina de login redirige al editor.
+    //
+    // `/verify-email` tambien pasa: el enlace del correo se puede abrir en un
+    // dispositivo donde el cliente no tiene sesion, y ahi la verificacion debe
+    // funcionar igual. El token del enlace ES la credencial.
     if (isAuthRoute) {
       return NextResponse.next();
     }
