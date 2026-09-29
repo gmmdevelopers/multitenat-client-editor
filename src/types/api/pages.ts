@@ -61,6 +61,23 @@ export interface GetPageForEditorResponse {
   seoDescripcion: string;
   updatedAt: string;
   hasUnpublishedChanges: boolean;
+  /**
+   * Estado del SITIO, que es distinto del estado de la pagina.
+   *
+   * `isPublished` es un interruptor maestro: en `false`, la web entera responde
+   * 404 aunque sus paginas esten publicadas. La toolbar lo necesita para
+   * distinguir "nunca lo he puesto en linea" de "tengo cambios sin publicar".
+   *
+   * `null` si la pagina no pertenece a ningun sitio (caso raro, no deberia
+   * ocurrir con los datos actuales).
+   */
+  site: {
+    isPublished: boolean;
+    /** Subdominio (`mi-clinica`), sin el dominio de la plataforma. */
+    domain: string;
+    /** Dominio propio conectado, si el cliente lo tiene. */
+    customDomain: string | null;
+  } | null;
 }
 
 export interface SaveDraftBlocksRequest {

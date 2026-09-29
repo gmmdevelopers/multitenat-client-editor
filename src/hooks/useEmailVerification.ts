@@ -47,6 +47,9 @@ export function useEmailVerification(): EmailVerificationState {
       .catch(() => {
         // Si falla la consulta no se muestra el aviso: es preferible no avisar
         // a mostrar un "confirma tu correo" a quien ya lo tiene confirmado.
+        //
+        // Tampoco se marca como "sin verificar" para el boton de publicar: un
+        // fallo de red no debe bloquear una accion que quiza si esta permitida.
         if (cancelled) return;
         setVerified(null);
       });

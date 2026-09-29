@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Canvas } from "@/components/editor/Canvas";
+import { SiteNotPublishedBanner } from "@/components/editor/SiteNotPublishedBanner";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { OrganismTooltipPreview } from "@/components/editor/OrganismTooltipPreview";
 import { useEditorStore } from "@/hooks/useEditorStore";
@@ -32,7 +33,8 @@ import {
   saveDraftBlocks,
   updatePage,
 } from "@/lib/api/pages";
-import { getSiteHomePage } from "@/lib/api/sites";
+import { getSiteHomePage, setSitePublished } from "@/lib/api/sites";
+import { useEmailVerification } from "@/hooks/useEmailVerification";
 import { PagesPanel } from "@/components/editor/PagesPanel";
 import { DeletePageModal } from "@/components/editor/DeletePageModal";
 import { CreatePageModal } from "@/components/editor/CreatePageModal";
@@ -66,6 +68,35 @@ export default function PageBuilderPage() {
   /** Evita que la carga inicial pise una plantilla ya aplicada. */
   const templateAppliedRef = useRef(false);
   const [hasUnpublished, setHasUnpublished] = useState(false);
+
+  /**
+   * Si el SITIO esta en linea (`Site.isPublished`).
+   *
+   * Es distinto de `hasUnpublished`: aquel mira si la pagina tiene cambios
+   * pendientes, este si la web existe para los visitantes. Un sitio puede
+   * tener las paginas publicadas y seguir en 404.
+   */
+  const [isSitePublished, setIsSitePublished] = useState(false);
+  /** Subdominio del sitio (`mi-clinica`), para mostrar su URL en la toolbar. */
+  const [siteDomain, setSiteDomain] = useState<string | null>(null);
+  const [siteCustomDomain, setSiteCustomDomain] = useState<string | null>(null);
+  /** El correo sin verificar impide publicar; el boton lo avisa antes. */
+  const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
+
+  /**
+   * Estado del correo, para que el boton de publicar lo sepa ANTES de pulsar.
+   *
+   * Se consulta aqui y no se deduce de un intento fallido: el cliente debe ver
+   * "Confirma tu correo" en el boton, no descubrirlo con un 403 al pulsarlo.
+   */
+  const { verified: emailVerified } = useEmailVerification();
+
+  useEffect(() => {
+    // `false` = confirmado sin verificar. `null` (aun comprobando, o fallo de
+    // red) NO bloquea: es preferible dejar intentar y recibir el 403 del
+    // backend que impedir una accion que quiza si estaba permitida.
+    setNeedsEmailVerification(emailVerified === false);
+  }, [emailVerified]);
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [activeTab, setActiveTab] = useState<OrganismTab>("all");
   const [sidebarMode, setSidebarMode] = useState<
@@ -152,6 +183,14 @@ export default function PageBuilderPage() {
         setPageTitle(page.title);
         setPagePath(page.path);
         setHasUnpublished(page.hasUnpublishedChanges);
+
+        // Estado del SITIO, que es lo que decide si la web responde o da 404.
+        if (page.site) {
+          setIsSitePublished(page.site.isPublished);
+          setSiteDomain(page.site.domain);
+          setSiteCustomDomain(page.site.customDomain);
+        }
+
         setLoadError(null);
       })
       .catch((err) => {
@@ -189,24 +228,58 @@ export default function PageBuilderPage() {
     }
   }
 
-  async function handlePublish() {
-    if (!pageId) return;
+  /**
+   * Publica el SITIO completo.
+   *
+   * Hace tres cosas en orden:
+   *
+   *   1. Guarda el borrador — si no, se publicaria la version anterior.
+   *   2. Publica la pagina actual, para que sus bloques pasen a
+   *      `publishedBlocks`.
+   *   3. Enciende el interruptor del SITIO (`isPublished`), que es lo que hace
+   *      que la web deje de responder 404.
+   *
+   * El paso 3 es el que faltaba: antes solo se hacia el 2, asi que un cliente
+   * nuevo publicaba su pagina, veia "publicado" en el editor y su web seguia
+   * sin existir para los visitantes.
+   *
+   * El orden importa: publicar el sitio primero lo dejaria en linea un instante
+   * con el contenido viejo.
+   */
+  async function handlePublishSite() {
+    if (!pageId || !activeSiteId) return;
+
     setIsPublishing(true);
+
     try {
       await saveDraftBlocks(pageId, blocks);
-      await publishPage(pageId);
+
+      try {
+        await publishPage(pageId);
+      } catch (error) {
+        // 409 = la pagina no tenia cambios pendientes. No es un fallo: el sitio
+        // puede estar sin publicar aunque sus paginas ya esten al dia.
+        const status = (error as { response?: { status?: number } })?.response
+          ?.status;
+        if (status !== 409) throw error;
+      }
+
+      await setSitePublished(activeSiteId, true);
+
       setHasUnpublished(false);
-      toast.success("Cambios publicados");
+      setIsSitePublished(true);
+      toast.success("Tu sitio esta en linea");
     } catch (err) {
-      // El backend responde 409 cuando no hay cambios sin publicar: es un
-      // caso esperado, no un fallo, asi que se muestra como aviso.
       const status = (err as { response?: { status?: number } })?.response
         ?.status;
-      if (status === 409) {
-        toast.info("No hay cambios sin publicar");
+
+      // 403 = correo sin verificar. Se dice que falta, en vez del mensaje
+      // generico del backend, que el cliente no puede accionar.
+      if (status === 403) {
+        toast.error("Confirma tu correo para publicar tu sitio.");
       } else {
         toast.error(
-          getErrorMessage(err, "No se pudieron publicar los cambios."),
+          getErrorMessage(err, "No pudimos publicar tu sitio. Intenta de nuevo."),
         );
       }
     } finally {
@@ -397,10 +470,34 @@ export default function PageBuilderPage() {
         handleResetZoom={handleResetZoom}
         handleZoomIn={handleZoomIn}
         handleZoomOut={handleZoomOut}
-        handlePublishPage={handlePublish}
+        handlePublishSite={handlePublishSite}
         handleSaveDraft={handleSaveDraft}
         handlePreview={handlePreview}
+        publicationState={
+          !isSitePublished
+            ? "never-published"
+            : hasUnpublished
+              ? "has-changes"
+              : "up-to-date"
+        }
+        isPublishing={isPublishing}
+        siteDomain={siteDomain}
+        customDomain={siteCustomDomain}
+        needsEmailVerification={needsEmailVerification}
       />
+
+      {/* Aviso de sitio sin publicar. Va justo bajo la toolbar, antes de la
+          barra de titulo de la pagina: es lo primero que debe ver un cliente
+          que acaba de entrar y su web aun no existe para nadie. */}
+      {!isSitePublished ? (
+        <SiteNotPublishedBanner
+          siteDomain={siteDomain}
+          customDomain={siteCustomDomain}
+          needsEmailVerification={needsEmailVerification}
+          isPublishing={isPublishing}
+          onPublish={handlePublishSite}
+        />
+      ) : null}
 
       <div className="flex items-center justify-between border-b border-stone-800 bg-stone-900/40 px-4 py-2 text-xs text-stone-400">
         <span className="font-medium text-stone-200">

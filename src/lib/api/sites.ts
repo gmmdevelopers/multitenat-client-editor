@@ -65,7 +65,7 @@ export async function updateSite(
   return data;
 }
 
-/** GET /sites/:siteId/home — resuelve el pageId de la página home ("/"). */
+/** El backend devuelve el pageId de la pagina home ("/"). */
 export async function getSiteHomePage(
   siteId: string,
 ): Promise<SiteEditorEntryPointResponse> {
@@ -124,10 +124,34 @@ export async function getPublicationSummary(
 }
 
 /**
- * Publica o despublica el sitio completo.
+ * Estado de publicacion del SITIO, distinto del de la pagina.
  *
- * Al publicar también sube las páginas con cambios pendientes. Al despublicar,
- * la web entera responde 404 y las páginas conservan su estado.
+ * `isPublished` es un interruptor maestro: en `false`, la web entera responde
+ * 404 aunque sus paginas esten publicadas. El editor lo necesita para
+ * distinguir "nunca lo he puesto en linea" de "tengo cambios sin publicar".
+ */
+export interface SitePublicationState {
+  isPublished: boolean;
+  /** Subdominio (`mi-clinica`), sin el dominio de la plataforma. */
+  domain: string;
+  /** Dominio propio conectado, si el cliente lo tiene. */
+  customDomain: string | null;
+}
+
+export interface PublishSiteResult {
+  ok: true;
+  isPublished: boolean;
+  publishedPages: number;
+}
+
+/**
+ * Publica o despublica el sitio ENTERO.
+ *
+ * Publicar sube tambien las paginas con cambios pendientes, asi que es la
+ * unica llamada que necesita el editor: no hay que publicar pagina por pagina
+ * antes.
+ *
+ * Requiere el correo verificado (el backend responde 403 si no lo esta).
  */
 export async function setSitePublished(
   siteId: string,
