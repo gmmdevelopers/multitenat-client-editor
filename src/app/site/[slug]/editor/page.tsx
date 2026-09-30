@@ -40,6 +40,7 @@ import { DeletePageModal } from "@/components/editor/DeletePageModal";
 import { CreatePageModal } from "@/components/editor/CreatePageModal";
 import type { PageSummary } from "@/types/site";
 import { ViewportMode } from "@/components/editor/ViewportSelector";
+import { storePreviewPalette } from "@/lib/preview-palette";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage } from "@/lib/api/errors";
 
@@ -58,6 +59,16 @@ export default function PageBuilderPage() {
   const [pagePath, setPagePath] = useState("/");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
+  /**
+   * Paleta del sitio, para pintar el canvas con los colores del cliente.
+   *
+   * Vive aqui y no en el store del editor porque NO forma parte del borrador de
+   * la pagina: es configuracion del sitio. Si se guardara en los bloques, dos
+   * paginas del mismo sitio podrian tener paletas distintas.
+   */
+  const [sitePalette, setSitePalette] = useState<unknown>(null);
+  /** Vertical del sitio, que decide los colores por defecto. */
+  const [siteType, setSiteType] = useState<string | undefined>(undefined);
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
@@ -189,8 +200,16 @@ export default function PageBuilderPage() {
           setIsSitePublished(page.site.isPublished);
           setSiteDomain(page.site.domain);
           setSiteCustomDomain(page.site.customDomain);
+          // La paleta se rellena de la respuesta del editor y no de una
+          // peticion aparte: si no coincidieran, el canvas pintaria un tema y
+          // la web publicada otro.
+          setSitePalette(page.site.palette ?? null);
+          setSiteType(page.site.siteType ?? undefined);
+          storePreviewPalette({
+            palette: page.site.palette ?? null,
+            siteType: page.site.siteType ?? null,
+          });
         }
-
         setLoadError(null);
       })
       .catch((err) => {
@@ -637,6 +656,8 @@ export default function PageBuilderPage() {
           onResetBlock={resetBlockProps}
           onReorderBlocks={reorderBlocksById}
           onFocusField={focusField}
+          palette={sitePalette}
+          siteType={siteType}
         />
 
         {/* Sidebar Derecho */}

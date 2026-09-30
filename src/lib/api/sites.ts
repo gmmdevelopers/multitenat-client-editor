@@ -23,6 +23,11 @@ export interface UpdateSiteRequest {
   domain?: string;
   customDomain?: string | null;
   isPublished?: boolean;
+  /**
+   * Settings del sitio. El backend los MEZCLA con los existentes: enviar solo
+   * `palette` no borra las credenciales de pago que ya hubiera.
+   */
+  settings?: Record<string, unknown>;
 }
 
 export interface UpdateSiteResponse {

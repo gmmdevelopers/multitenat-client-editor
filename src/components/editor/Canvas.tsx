@@ -21,6 +21,8 @@ import { RotateCcw } from "lucide-react";
 
 import { ORGANISMS_MAP, getDefaultPropsForOrganism } from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "./connected-organisms";
+import { useSitePaletteTokens } from "@/components/SiteThemeProvider";
+import { paletteCssVariables } from "@multitenant/design-system";
 import { BlockInstance } from "@/types/editor-state";
 import { ViewportMode } from "./ViewportSelector";
 import { pathToLocationKey, resolveFieldPath } from "@/utils/field-resolver";
@@ -37,6 +39,10 @@ interface CanvasProps {
   onReorderBlocks: (activeId: string, overId: string) => void;
   /** Resalta el campo del panel que corresponde al elemento clickeado. */
   onFocusField: (fieldKey: string | null) => void;
+  /** Paleta del sitio, para que el lienzo use los colores del cliente. */
+  palette?: unknown;
+  /** Vertical del sitio, que decide los colores por defecto. */
+  siteType?: string;
 }
 
 function SortableBlock({
@@ -311,8 +317,12 @@ export function Canvas({
   onResetBlock,
   onReorderBlocks,
   onFocusField,
+  palette,
+  siteType,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const paletteTokens = useSitePaletteTokens(palette, siteType);
 
   // Mantenemos la funcionalidad de zoom con la rueda del ratón (Ctrl + Scroll)
   useEffect(() => {
@@ -355,10 +365,17 @@ export function Canvas({
           transform: `scale(${zoom})`,
           transformOrigin: "top center",
           transition: "transform 0.15s ease-out",
+          // La paleta se aplica SOLO al lienzo, no a la UI del editor: el panel
+          // de propiedades y la barra de herramientas son oscuros por diseno y
+          // heredar el tema del cliente los volveria ilegibles con un tema
+          // claro (y al reves).
+          ...paletteCssVariables(paletteTokens),
+          backgroundColor: paletteTokens.background,
+          color: paletteTokens.onBackground,
         }}
         className={`w-full flex flex-col gap-0 ${
           viewportMode === "mobile"
-            ? "max-w-[375px] border-4 border-stone-800 rounded-[2.5rem] overflow-hidden bg-stone-900 shadow-2xl my-4"
+            ? "max-w-[375px] border-4 border-stone-800 rounded-[2.5rem] overflow-hidden shadow-2xl my-4"
             : "max-w-5xl overflow-hidden shadow-2xl"
         }`}
       >

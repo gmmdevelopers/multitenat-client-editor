@@ -21,6 +21,7 @@ import {
 
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { PaletteSelector } from "@/components/settings/PaletteSelector";
 import { getErrorMessage } from "@/lib/api/errors";
 import {
   getCurrentSite,
@@ -622,6 +623,9 @@ export default function SettingsPage() {
           ) : null}
         </div>
       </section>
+
+      {/* --- Paleta de colores --- */}
+      <PaletteSelector />
 
       {/* --- Plan --- */}
       <section className="mb-6 rounded-2xl border-stone-800 bg-stone-900/50 p-6">

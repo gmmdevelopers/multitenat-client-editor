@@ -14,6 +14,7 @@ import type {
 } from "@/types/api/pages";
 import { BlockInstance } from "@/types/editor-state";
 import type { PageSummary } from "@/types/site";
+import type { CustomPalette } from "@multitenant/design-system";
 
 export async function getPage(pageId: string) {
   const { data } = await api.get<GetPageResponse>(`/pages/${pageId}`);
@@ -88,6 +89,13 @@ export interface PublicPageResponse {
   seoDescripcion: string;
   publishedBlocks: BlockInstance[];
   publishedAt: string | null;
+  /**
+   * Paleta elegida por el cliente, o `null` si usa la del vertical.
+   *
+   * Llega en la misma respuesta que los bloques para que la web no pinte un
+   * frame con los colores por defecto y cambie despues.
+   */
+  palette?: Partial<CustomPalette> | null;
 }
 
 /** Resuelve una página publicada por su ruta. Endpoint público, sin sesión. */

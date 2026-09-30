@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { PageRenderer } from "@/components/PageRenderer";
+import { SiteThemeProvider } from "@/components/SiteThemeProvider";
 import { getPublicPageByPath } from "@/lib/api/pages";
 import { getErrorMessage } from "@/lib/api/errors";
 import type { BlockInstance } from "@/types/editor-state";
@@ -40,6 +41,7 @@ function PublicPageContent() {
   const path = searchParams.get("path") ?? "/";
 
   const [blocks, setBlocks] = useState<BlockInstance[] | null>(null);
+  const [palette, setPalette] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,6 +51,9 @@ function PublicPageContent() {
       .then((page) => {
         if (cancelled) return;
         setBlocks(page.publishedBlocks ?? []);
+        // La paleta viene en la MISMA respuesta que los bloques: si se pidiera
+        // aparte, la web se pintaria primero con los colores por defecto.
+        setPalette(page.palette ?? null);
         document.title = page.seoTitle || page.title || "Sitio";
       })
       .catch((err) => {
@@ -75,5 +80,9 @@ function PublicPageContent() {
     );
   }
 
-  return <PageRenderer blocks={blocks} />;
+  return (
+    <SiteThemeProvider palette={palette}>
+      <PageRenderer blocks={blocks} />
+    </SiteThemeProvider>
+  );
 }

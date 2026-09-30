@@ -26,8 +26,11 @@ export function PageRenderer({ blocks }: PageRendererProps) {
 
   if (visibleBlocks.length === 0) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white px-6 text-center">
-        <p className="text-sm text-stone-500">
+      <div
+        className="flex min-h-screen items-center justify-center px-6 text-center"
+        style={{ backgroundColor: "var(--site-background)" }}
+      >
+        <p className="text-sm" style={{ color: "var(--site-muted)" }}>
           Esta página todavía no tiene secciones.
         </p>
       </div>
@@ -35,7 +38,13 @@ export function PageRenderer({ blocks }: PageRendererProps) {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    // El fondo sale de la paleta del sitio (`--site-background`), no de un
+    // `bg-white` fijo: con un tema oscuro, un fondo blanco hardcodeado dejaria
+    // bandas blancas entre las secciones que no pintan su propio fondo.
+    <div
+      className="min-h-screen"
+      style={{ backgroundColor: "var(--site-background)" }}
+    >
       {visibleBlocks.map((block) => {
         const entry = ORGANISMS_MAP.get(block.metaName);
         if (!entry) return null;

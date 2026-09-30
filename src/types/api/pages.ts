@@ -1,5 +1,6 @@
 import type { Page, PageSummary } from "@/types/site";
 import { BlockInstance } from "../editor-state";
+import type { CustomPalette } from "@multitenant/design-system";
 
 export interface ListPagesResponse {
   pages: PageSummary[];
@@ -77,6 +78,10 @@ export interface GetPageForEditorResponse {
     domain: string;
     /** Dominio propio conectado, si el cliente lo tiene. */
     customDomain: string | null;
+    /** Paleta elegida por el cliente; `null` si usa la del vertical. */
+    palette?: Partial<CustomPalette> | null;
+    /** Vertical del sitio, que decide los colores por defecto. */
+    siteType?: string | null;
   } | null;
 }
 

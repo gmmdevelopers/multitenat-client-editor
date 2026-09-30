@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageRenderer } from "@/components/PageRenderer";
+import { SiteThemeProvider } from "@/components/SiteThemeProvider";
+import { readPreviewPalette } from "@/lib/preview-palette";
 import { useEditorStore } from "@/hooks/useEditorStore";
 
 /**
@@ -34,9 +36,26 @@ function PreviewContent() {
 
   const { blocks, pageId: storePageId } = useEditorStore();
   const [isHydrated, setIsHydrated] = useState(false);
+  /**
+   * Paleta del sitio, espejada del editor en localStorage.
+   *
+   * El preview se abre en una pestana nueva, asi que no comparte estado de
+   * React con el editor y no puede leerla de ahi: se lee del mismo sitio donde
+   * la deja el editor (`site-palette-preview`).
+   */
+  const [sitePalette, setSitePalette] = useState<unknown>(null);
+  const [siteType, setSiteType] = useState<string | null>(null);
 
   // El store arranca vacio (skipHydration) y se rellena desde localStorage.
   // Esperamos a esa rehidratacion para no pintar un preview en blanco.
+  useEffect(() => {
+    const snapshot = readPreviewPalette();
+    if (snapshot) {
+      setSitePalette(snapshot.palette);
+      setSiteType(snapshot.siteType);
+    }
+  }, []);
+
   useEffect(() => {
     void Promise.resolve(useEditorStore.persist.rehydrate()).finally(() =>
       setIsHydrated(true),
@@ -58,5 +77,12 @@ function PreviewContent() {
     );
   }
 
-  return <PageRenderer blocks={blocks} />;
+  return (
+    // La paleta del sitio se guarda en localStorage al cargar el editor. Sin
+    // ella, el preview (que abre en OTRA pestana, con otro estado de React)
+    // pintaria con los colores por defecto y no coincidiria con el canvas.
+    <SiteThemeProvider palette={sitePalette} siteType={siteType ?? undefined}>
+      <PageRenderer blocks={blocks} />
+    </SiteThemeProvider>
+  );
 }

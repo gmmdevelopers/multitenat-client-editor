@@ -1,4 +1,5 @@
 import type { BlockInstance } from "@/types/editor-state";
+import type { CustomPalette } from "@multitenant/design-system";
 
 /**
  * Estado de una solicitud de dominio propio.
@@ -41,6 +42,10 @@ export interface SiteSettings {
   theme?: "light" | "dark";
   primaryColor?: string;
   logoUrl?: string;
+  /** Vertical del sitio, que decide los colores por defecto. */
+  siteType?: string;
+  /** Paleta elegida por el cliente; sobreescribe los colores del vertical. */
+  palette?: Partial<CustomPalette> | null;
   payments?: SitePaymentSettings;
   domainRequest?: DomainRequestSettings;
 }
