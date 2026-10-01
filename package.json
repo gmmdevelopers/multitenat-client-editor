@@ -12,7 +12,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@multitenant/design-system": "git+https://github.com/gmmdevelopers/multitenant-design-system.git#main",
+    "@multitenant/design-system": "github:gmmdevelopers/multitenant-design-system#main",
     "axios": "^1.20.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.49.0",
