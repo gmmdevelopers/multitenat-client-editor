@@ -112,11 +112,39 @@ export async function uploadImageFile(file: File): Promise<TenantImage> {
     size: file.size,
   });
 
-  const put = await fetch(signed.uploadUrl, {
-    method: "PUT",
-    headers: signed.headers,
-    body: file,
-  });
+  /**
+   * El PUT va DENTRO de un try.
+   *
+   * `fetch` RECHAZA la promesa (no resuelve con `ok: false`) cuando la peticion
+   * no llega a completarse: host inalcanzable, DNS, o un bloqueo del navegador.
+   * Sin este try, ese rechazo se propagaba como un error tecnico.
+   *
+   * Lo que protege de verdad es no llamar a `confirmUpload` cuando el objeto no
+   * llego a R2: registrarlo dejaria una fila en la galeria apuntando a un
+   * archivo inexistente.
+   *
+   * OJO al diagnosticar: un `net::ERR_ABORTED` contra R2 en la consola NO
+   * significa que la subida fallo. En desarrollo, React monta los efectos dos
+   * veces y se ve un PUT duplicado que el navegador cancela; el primero si
+   * completa (200) y el `confirm` es correcto. Comprobar el estado real de la
+   * peticion antes de sacar conclusiones.
+   */
+  let put: Response;
+
+  try {
+    put = await fetch(signed.uploadUrl, {
+      method: "PUT",
+      headers: signed.headers,
+      body: file,
+    });
+  } catch (error) {
+    // Fallo de red real. NO se llama a `confirmUpload`: el objeto no esta en
+    // el bucket.
+    console.error("El PUT contra R2 no llego a completarse:", error);
+    throw new Error(
+      "No pudimos subir la imagen. Revisa tu conexion e intenta de nuevo.",
+    );
+  }
 
   if (!put.ok) {
     // El detalle de R2 no es util para el cliente (habla de firmas y checksums),
@@ -127,8 +155,7 @@ export async function uploadImageFile(file: File): Promise<TenantImage> {
     );
   }
 
-  // Solo se registra si el archivo llego a subirse: si el PUT falla, no debe
-  // quedar una entrada en la galeria apuntando a un objeto inexistente.
+  // Solo se registra si el archivo llego a subirse de verdad.
   return confirmUpload({
     storageKey: signed.storageKey,
     fileName: signed.fileName,

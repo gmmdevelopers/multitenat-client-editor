@@ -24,11 +24,47 @@ export interface UpdateSiteRequest {
   customDomain?: string | null;
   isPublished?: boolean;
   /**
+   * ID de una imagen de la galeria propia, o `null` para quitarla.
+   *
+   * El backend comprueba que la imagen pertenece al tenant de la sesion: mandar
+   * el ID de una ajena responde 403.
+   */
+  bannerImageId?: string | null;
+  /** Igual que `bannerImageId`, para el icono del sitio. */
+  iconImageId?: string | null;
+  /**
+   * Cuanto se le pide al paciente al agendar.
+   *
+   * El backend responde 400 si se pide un pago sin Mercado Pago conectado: sin
+   * cuenta no hay a donde pagar, y la cita quedaria imposible de confirmar.
+   */
+  depositPolicy?: DepositPolicy;
+  /**
    * Settings del sitio. El backend los MEZCLA con los existentes: enviar solo
    * `palette` no borra las credenciales de pago que ya hubiera.
    */
   settings?: Record<string, unknown>;
 }
+
+/**
+ * Politica de cobro al agendar.
+ *
+ *   - `none` -> se agenda sin pagar nada.
+ *   - `25|50|75` -> se abona ese porcentaje; el resto, en el local.
+ *   - `100` -> pago obligatorio del total para confirmar.
+ *
+ * Sin configurar se trata como `none`. Se guarda como texto porque `100` no es
+ * "el doble de 50" en semantica: es obligatorio, con su propio tratamiento.
+ */
+export type DepositPolicy = "none" | "25" | "50" | "75" | "100";
+
+export const DEPOSIT_POLICIES: DepositPolicy[] = [
+  "none",
+  "25",
+  "50",
+  "75",
+  "100",
+];
 
 export interface UpdateSiteResponse {
   site: Site;

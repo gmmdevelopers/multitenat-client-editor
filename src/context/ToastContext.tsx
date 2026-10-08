@@ -3,6 +3,7 @@
 import {
   createContext,
   useCallback,
+  useMemo,
   useContext,
   useState,
   ReactNode,
@@ -78,8 +79,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   ]);
   const info = useCallback((message: string) => toast(message, "info"), [toast]);
 
+  /**
+   * El valor del contexto SE MEMORIZA.
+   *
+   * Un objeto literal aqui se recrea en cada render del provider, asi que
+   * `useToast()` devolvia una referencia nueva aunque `toast` y sus derivados
+   * estuvieran envueltos en `useCallback`. Eso hacia que cualquier efecto que
+   * dependiera de `toast` (el que carga la pagina en el editor) se volviera a
+   * ejecutar al aparecer un toast, llamara a la API y PISARA el estado local:
+   * se añadia un bloque, salia el aviso, y el bloque desaparecia.
+   */
+  const value = useMemo(
+    () => ({ toast, success, error, info }),
+    [toast, success, error, info],
+  );
+
   return (
-    <ToastContext.Provider value={{ toast, success, error, info }}>
+    <ToastContext.Provider value={value}>
       {children}
 
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2">

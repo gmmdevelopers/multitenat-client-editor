@@ -12,7 +12,7 @@ import {
   secondaryButtonClass,
 } from "./fields";
 import type { RegistrationDraft } from "./registration-utils";
-import { TurnstileWidget } from "./TurnstileWidget";
+import { TurnstileWidget } from "@/components/captcha/TurnstileWidget";
 
 interface StepPlanProps {
   draft: RegistrationDraft;

@@ -96,6 +96,21 @@ export interface PublicPageResponse {
    * frame con los colores por defecto y cambie despues.
    */
   palette?: Partial<CustomPalette> | null;
+  /**
+   * URL del icono del sitio, o `null` si el cliente no subio uno.
+   *
+   * Lo usa la web publica para el favicon. Llega aqui y no por una peticion
+   * aparte porque es un dato del SITIO y ya se esta pidiendo la pagina: un
+   * segundo viaje solo para el icono retrasaria el favicon sin motivo.
+   */
+  iconUrl?: string | null;
+  /**
+   * Nombre del sitio (`Site.title`), para el titulo de la pestana.
+   *
+   * Distinto de `seoTitle`: aquel es de la PAGINA (para buscadores) y este es
+   * la MARCA del negocio, la misma en todas las paginas.
+   */
+  siteName?: string | null;
 }
 
 /** Resuelve una página publicada por su ruta. Endpoint público, sin sesión. */

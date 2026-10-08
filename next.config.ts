@@ -59,6 +59,7 @@ const nextConfig: NextConfig = {
     "app.localhost",
     "salud-bienestar.localhost",
     "app.multitenant.cl",
+    "app.multitenant.test",
   ],
   // El design system se consume como copia (`file:` en package.json): pnpm lo
   // duplica en node_modules, asi que hay que reinstalar (o rsync) tras cada

@@ -28,9 +28,38 @@ export function buildTenantDomain(slug: string): string {
 
 /** URL completa con protocolo, para enlaces que se abren en otra pestaña. */
 export function buildTenantUrl(slug: string): string {
-  const isLocal = APP_DOMAIN.endsWith(".test") || APP_DOMAIN === "localhost";
+  return buildSiteUrl(buildTenantDomain(slug));
+}
 
-  return `${isLocal ? "http" : "https"}://${buildTenantDomain(slug)}`;
+/**
+ * URL completa de un host, con el protocolo que le corresponde.
+ *
+ * El protocolo se decide por el HOST y no por el entorno de la plataforma,
+ * porque hay dos casos que no coinciden:
+ *
+ *   - Un dominio propio (`mi-clinica.cl`) siempre va por HTTPS, aunque el panel
+ *     se este sirviendo en local.
+ *   - Un host local (`.test`, `.localhost`, `127.0.0.1`) no tiene certificado,
+ *     asi que va por HTTP: con HTTPS el navegador avisa de un certificado
+ *     invalido y el enlace parece roto.
+ *
+ * Recibe el host ya compuesto (sin protocolo) para poder usarse tanto con un
+ * subdominio como con un dominio propio.
+ */
+export function buildSiteUrl(host: string): string {
+  const normalized = host.trim().replace(/^https?:\/\//, "");
+
+  const isLocalHost =
+    normalized === "localhost" ||
+    normalized.startsWith("localhost:") ||
+    normalized === "127.0.0.1" ||
+    normalized.startsWith("127.0.0.1:") ||
+    normalized.endsWith(".test") ||
+    normalized.includes(".test:") ||
+    normalized.endsWith(".localhost") ||
+    normalized.includes(".localhost:");
+
+  return `${isLocalHost ? "http" : "https"}://${normalized}`;
 }
 
 /**

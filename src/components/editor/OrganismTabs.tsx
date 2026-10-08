@@ -27,9 +27,16 @@ interface OrganismTabsProps {
   counts: Record<OrganismTab, number>;
 }
 
+/**
+ * Tabs de vertical.
+ *
+ * `shrink-0` es obligatorio: el padre es un flex con `min-h-0`, asi que sin esto
+ * los tabs se comprimirian para dejar sitio a la lista cuando esta scrollea,
+ * en vez de quedarse fijos arriba.
+ */
 export function OrganismTabs({ active, onChange, counts }: OrganismTabsProps) {
   return (
-    <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-stone-950/60 p-1">
+    <div className="mb-4 flex shrink-0 flex-wrap gap-1 rounded-xl bg-stone-950/60 p-1">
       {TAB_LABELS.map(({ value, label }) => {
         const isActive = value === active;
         const count = counts[value] ?? 0;

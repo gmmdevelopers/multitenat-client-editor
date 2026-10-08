@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BlockInstance } from "@/types/editor-state";
-import { ORGANISMS_MAP } from "@/lib/editor-registry";
+import { ALL_BLOCKS_MAP } from "@/lib/editor-registry";
 import { useEditorStore } from "@/hooks/useEditorStore";
 import {
   Trash2,
@@ -14,8 +14,24 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
+import * as SimpleIcons from "react-icons/si";
+import * as FontAwesomeIcons from "react-icons/fa";
 import { isColorProp, isIconProp, isImageProp, isLinkProp } from "@/utils/InputsTypeHelper";
 import { ImagePickerModal } from "./ImagePickerModal";
+import { NestedList } from "./NestedList";
+
+/**
+ * Todos los sets de iconos que soporta `DynamicIcon`.
+ *
+ * El panel debe resolver contra los mismos tres sets que el canvas: resolviendo
+ * solo contra lucide, un `FaInstagram` (font-awesome) se mostraba como un icono
+ * de interrogacion aunque en la pagina se dibujara bien.
+ */
+const ALL_ICONS: Record<string, any> = {
+  ...(LucideIcons as any),
+  ...(SimpleIcons as any),
+  ...(FontAwesomeIcons as any),
+};
 
 interface PropertiesPanelProps {
   selectedBlock: BlockInstance | undefined;
@@ -44,6 +60,18 @@ const POPULAR_ICONS = [
   "Settings",
   "Activity",
   "Stethoscope",
+  // Redes sociales: los nombres llevan el prefijo `Fa` porque vienen de
+  // `react-icons/fa`. Los alias sin prefijo (`Instagram`, `Facebook`) NO
+  // existen en el set que carga `DynamicIcon`, asi que elegirlos dejaba el
+  // enlace sin icono. Se listan con el nombre real para que el selector
+  // ofrezca solo lo que se puede dibujar.
+  "FaInstagram",
+  "FaFacebookF",
+  "FaLinkedin",
+  "FaXTwitter",
+  "FaYoutube",
+  "FaTiktok",
+  "FaWhatsapp",
 ];
 
 const PRESET_COLORS = [
@@ -168,7 +196,11 @@ export function PropertiesPanel({
     );
   }
 
-  const registryEntry = ORGANISMS_MAP.get(selectedBlock.metaName);
+  // `ALL_BLOCKS_MAP` y no `ORGANISMS_MAP`: el bloque seleccionado puede ser una
+  // UTILIDAD (el boton de WhatsApp), que vive en otra categoria. Con el mapa de
+  // organismos, `registryEntry` quedaba `undefined` para esos bloques y el panel
+  // no tenia de donde sacar las etiquetas de los campos.
+  const registryEntry = ALL_BLOCKS_MAP.get(selectedBlock.metaName);
   const props = safeProps(selectedBlock);
 
   const toggleListCollapse = (propName: string) => {
@@ -219,6 +251,84 @@ export function PropertiesPanel({
     onUpdateProp(selectedBlock.id, propName, [...currentArray, templateItem]);
   };
 
+  /**
+   * Cambia un campo de un item de una lista ANIDADA (lista dentro de un item).
+   *
+   * `outerPath` es la ruta hasta la lista contenedora (`members`), `outerIndex`
+   * el item dentro de ella; `innerKey` la lista anidada (`socialLinks`).
+   */
+  const handleNestedArrayItemChange = (
+    outerPath: string,
+    outerIndex: number,
+    innerKey: string,
+    innerIndex: number,
+    fieldKey: string,
+    newValue: any,
+  ) => {
+    const outer = [...(props[outerPath] || [])];
+    const item = { ...outer[outerIndex] };
+    const inner = [...(item[innerKey] || [])];
+
+    inner[innerIndex] =
+      fieldKey === ""
+        ? newValue
+        : { ...(inner[innerIndex] ?? {}), [fieldKey]: newValue };
+
+    item[innerKey] = inner;
+    outer[outerIndex] = item;
+    onUpdateProp(selectedBlock.id, outerPath, outer);
+  };
+
+  /** Añade un item vacio a una lista anidada (`socialLinks`). */
+  const handleAddNestedArrayItem = (
+    outerPath: string,
+    outerIndex: number,
+    innerKey: string,
+  ) => {
+    const outer = [...(props[outerPath] || [])];
+    const item = { ...outer[outerIndex] };
+    const inner = [...(item[innerKey] || [])];
+
+    // El item nuevo hereda las claves del primero, para que salga con los
+    // mismos campos (`label`, `href`, `icon`) en vez de vacio.
+    const template =
+      inner.length > 0 && typeof inner[0] === "object"
+        ? Object.keys(inner[0]).reduce(
+            (acc, k) => {
+              acc[k] = isIconProp(k)
+                ? "FaInstagram"
+                : isLinkProp(k)
+                  ? "https://"
+                  : "";
+              return acc;
+            },
+            {} as Record<string, any>,
+          )
+        : { label: "", href: "", icon: "FaInstagram" };
+
+    inner.push(template);
+    item[innerKey] = inner;
+    outer[outerIndex] = item;
+    onUpdateProp(selectedBlock.id, outerPath, outer);
+  };
+
+  /** Quita un item de una lista anidada. */
+  const handleRemoveNestedArrayItem = (
+    outerPath: string,
+    outerIndex: number,
+    innerKey: string,
+    innerIndex: number,
+  ) => {
+    const outer = [...(props[outerPath] || [])];
+    const item = { ...outer[outerIndex] };
+    const inner = [...(item[innerKey] || [])];
+
+    inner.splice(innerIndex, 1);
+    item[innerKey] = inner;
+    outer[outerIndex] = item;
+    onUpdateProp(selectedBlock.id, outerPath, outer);
+  };
+
   const handleRemoveArrayItem = (propName: string, index: number) => {
     const currentArray = [...(props[propName] || [])];
     currentArray.splice(index, 1);
@@ -266,7 +376,11 @@ export function PropertiesPanel({
     locationKey: string,
   ) => {
     // 1. Selector de Enlaces (HREF / URL / LINK)
-    if (isLinkProp(key)) {
+    //
+    // Se comprueba que el valor sea TEXTO antes de pintar el selector: un campo
+    // llamado `icon` dentro de una lista puede llegar como objeto, y sin esta
+    // guarda el `String(value)` de mas abajo imprimia `[object Object]`.
+    if (isLinkProp(key) && typeof value === "string") {
       return (
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-medium text-stone-400 capitalize flex items-center justify-between">
@@ -282,7 +396,7 @@ export function PropertiesPanel({
             <optgroup label="Secciones de este Canvas">
               {blocks.map((block, i) => {
                 const name =
-                  ORGANISMS_MAP.get(block.metaName)?.component?.displayName ||
+                  ALL_BLOCKS_MAP.get(block.metaName)?.component?.displayName ||
                   block.metaName;
                 const anchor = `#${block.metaName.toLowerCase()}-${block.id.slice(0, 4)}`;
                 return (
@@ -315,9 +429,12 @@ export function PropertiesPanel({
     }
 
     // 2. Selector de Iconos
-    if (isIconProp(key)) {
+    if (isIconProp(key) && typeof value === "string") {
+      // Se resuelve contra TODOS los sets (lucide + simple-icons + font-awesome),
+      // no solo lucide: `FaInstagram` viene de font-awesome y con el fallback
+      // anterior el boton mostraba un icono de interrogacion.
       const IconComponent =
-        (LucideIcons as any)[value] || LucideIcons.HelpCircle;
+        (ALL_ICONS as any)[value] || LucideIcons.HelpCircle;
       const isOpen = activeIconProp?.propName === locationKey;
 
       return (
@@ -342,7 +459,7 @@ export function PropertiesPanel({
           {isOpen && (
             <div className="absolute top-full left-0 z-30 mt-1 w-full rounded-xl border border-stone-800 bg-stone-900 p-2 shadow-xl grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
               {POPULAR_ICONS.map((iconName) => {
-                const ItemIcon = (LucideIcons as any)[iconName];
+                const ItemIcon = (ALL_ICONS as any)[iconName];
                 if (!ItemIcon) return null;
                 return (
                   <button
@@ -405,6 +522,33 @@ export function PropertiesPanel({
       );
     }
 
+    // 3.5 Selector de opciones (`control: "select"`)
+    //
+    // Va antes del color a proposito: un campo puede llamarse `position` y no
+    // parecerse a ningun control conocido, pero declarar sus opciones en el
+    // meta. Sin esto caia en el input de texto libre.
+    const def = fieldDefs.get(key);
+    if (def?.control === "select" && def.options?.length) {
+      return (
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium capitalize text-stone-400">
+            {key}
+          </label>
+          <select
+            value={String(value ?? "")}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full cursor-pointer rounded-lg border border-stone-800 bg-stone-950 px-2.5 py-1.5 text-xs text-stone-200 outline-none focus:border-amber-400"
+          >
+            {def.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
     // 4. Control de Color
     if (isColorProp(key, value)) {
       const colorValue = typeof value === "string" ? value : "";
@@ -461,7 +605,37 @@ export function PropertiesPanel({
       );
     }
 
-    // 5. Input Estándar
+    // 5. Objeto anidado
+    //
+    // Se comprueba ANTES del input de texto: un valor que no sea primitivo
+    // imprimia `[object Object]`, porque el input hace `String(value)`. Ahora se
+    // listan sus campos, que es lo que el usuario espera editar.
+    if (typeof value === "object" && value !== null) {
+      return (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-stone-800 bg-stone-950/40 p-2">
+          <label className="text-[10px] font-medium text-stone-400 capitalize">
+            {key}
+          </label>
+          {Object.entries(value as Record<string, unknown>).map(
+            ([subKey, subValue]) => (
+              <div
+                key={subKey}
+                className="flex items-center justify-between gap-2 text-[11px]"
+              >
+                <span className="text-stone-500">{subKey}</span>
+                <span className="truncate text-stone-300">
+                  {typeof subValue === "object"
+                    ? "—"
+                    : String(subValue ?? "")}
+                </span>
+              </div>
+            ),
+          )}
+        </div>
+      );
+    }
+
+    // 6. Input Estándar
     return (      <div className="flex flex-col gap-1">
         <label className="text-[10px] font-medium text-stone-400">
           {fieldLabels.get(key) ?? key}
@@ -487,12 +661,39 @@ export function PropertiesPanel({
   // Los metas nuevos declaran sus campos en `groups`, asi que aplanamos
   // fields + groups en un mapa propName -> label.
   const fieldLabels = new Map<string, string>();
+
+  /**
+   * Definicion completa de cada campo del meta.
+   *
+   * El panel decidia el control por el NOMBRE del prop (`isColorProp`,
+   * `isIconProp`...), asi que un `control: "select"` declarado en el meta se
+   * ignoraba y el campo salia como input de texto libre. Con esto el panel
+   * puede respetar el `control` que declaro el componente, que es quien sabe
+   * que valores admite.
+   */
+  const fieldDefs = new Map<
+    string,
+    { control?: string; options?: { label: string; value: string }[] }
+  >();
   const meta = registryEntry?.meta;
 
   const collectLabels = (
-    fields: readonly { name: string; label: string }[] | undefined,
+    fields:
+      | readonly {
+          name: string;
+          label: string;
+          control?: string;
+          options?: { label: string; value: string }[];
+        }[]
+      | undefined,
   ) => {
-    for (const field of fields ?? []) fieldLabels.set(field.name, field.label);
+    for (const field of fields ?? []) {
+      fieldLabels.set(field.name, field.label);
+      fieldDefs.set(field.name, {
+        control: field.control,
+        options: field.options,
+      });
+    }
   };
 
   collectLabels(meta?.fields);
@@ -582,8 +783,57 @@ export function PropertiesPanel({
                         </div>
 
                         {typeof item === "object" && item !== null
-                          ? Object.entries(item).map(([subKey, subValue]) =>
-                              renderSingleField(
+                          ? Object.entries(item).map(([subKey, subValue]) => {
+                              // Una lista DENTRO del item (las redes de un
+                              // miembro del equipo) necesita su propia lista
+                              // editable, no un campo de texto.
+                              if (Array.isArray(subValue)) {
+                                const nestedId = `${propName}-${index}-${subKey}`;
+                                return (
+                                  <NestedList
+                                    key={nestedId}
+                                    label={subKey}
+                                    items={subValue}
+                                    idPrefix={nestedId}
+                                    isCollapsed={!!collapsedLists[nestedId]}
+                                    onToggleCollapse={() =>
+                                      toggleListCollapse(nestedId)
+                                    }
+                                    onChange={(
+                                      innerIndex,
+                                      fieldKey,
+                                      newValue,
+                                    ) =>
+                                      handleNestedArrayItemChange(
+                                        propName,
+                                        index,
+                                        subKey,
+                                        innerIndex,
+                                        fieldKey,
+                                        newValue,
+                                      )
+                                    }
+                                    onAdd={() =>
+                                      handleAddNestedArrayItem(
+                                        propName,
+                                        index,
+                                        subKey,
+                                      )
+                                    }
+                                    onRemove={(innerIndex) =>
+                                      handleRemoveNestedArrayItem(
+                                        propName,
+                                        index,
+                                        subKey,
+                                        innerIndex,
+                                      )
+                                    }
+                                    renderField={renderSingleField}
+                                  />
+                                );
+                              }
+
+                              return renderSingleField(
                                 subKey,
                                 subValue,
                                 (newValue) =>
@@ -594,8 +844,8 @@ export function PropertiesPanel({
                                     newValue,
                                   ),
                                 `${propName}-${index}-${subKey}`,
-                              ),
-                            )
+                              );
+                            })
                           : renderSingleField(
                               propName,
                               item,

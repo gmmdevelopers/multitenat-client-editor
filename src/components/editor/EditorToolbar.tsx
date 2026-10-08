@@ -1,10 +1,17 @@
 "use client";
 
-import { ExternalLink, Globe, Lock } from "lucide-react";
+import {
+  ExternalLink,
+  Globe,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  Settings,
+} from "lucide-react";
 
 import { ViewportMode, ViewportSelector } from "./ViewportSelector";
 import { ZoomControls } from "./ZoomControls";
-import { buildTenantDomain } from "@/lib/tenant-domain";
+import { buildSiteUrl, buildTenantDomain } from "@/lib/tenant-domain";
 
 /**
  * Estado de publicacion del sitio, tal como lo ve el cliente.
@@ -40,6 +47,19 @@ interface EditorToolbarProps {
   customDomain: string | null;
   /** El correo sin verificar impide publicar: el boton lo dice antes de fallar. */
   needsEmailVerification: boolean;
+  /**
+   * Navegacion y sesion.
+   *
+   * Vivieron en un sidebar de 256px que solo contenia estos dos enlaces. Con el
+   * sidebar fuera, la toolbar pasa a ser el unico punto de navegacion del panel,
+   * y recibe el usuario para no volver a consultar el contexto de auth.
+   */
+  settingsHref: string;
+  /** Ruta al panel de administracion (bandeja de mensajes). */
+  adminHref: string;
+  userFullName: string;
+  userEmail: string;
+  onLogout: () => void;
 }
 
 export function EditorToolbar({
@@ -58,14 +78,19 @@ export function EditorToolbar({
   siteDomain,
   customDomain,
   needsEmailVerification,
+  settingsHref,
+  adminHref,
+  userFullName,
+  userEmail,
+  onLogout,
 }: EditorToolbarProps) {
   return (
-    <header className="flex h-14 items-center justify-between border-b border-stone-800 bg-stone-900 px-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-xs font-bold uppercase tracking-wider text-amber-300">
+    <header className="flex h-14 items-center justify-between gap-4 border-b border-stone-800 bg-stone-900 px-6">
+      <div className="flex min-w-0 items-center gap-3">
+        <h1 className="shrink-0 text-xs font-bold uppercase tracking-wider text-amber-300">
           Editor de Clinica
         </h1>
-        <span className="rounded-full bg-stone-800 px-2.5 py-0.5 text-[10px] text-stone-400">
+        <span className="shrink-0 rounded-full bg-stone-800 px-2.5 py-0.5 text-[10px] text-stone-400">
           {blocksLength} {blocksLength === 1 ? "seccion" : "secciones"}
         </span>
 
@@ -77,7 +102,7 @@ export function EditorToolbar({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <ViewportSelector mode={viewportMode} onChange={handleViewportChange} />
 
         <div className="h-4 w-[1px] bg-stone-800" />
@@ -90,7 +115,7 @@ export function EditorToolbar({
         />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={handlePreview}
           className="flex items-center gap-1.5 rounded-xl border border-stone-700 px-4 py-1.5 text-xs font-bold text-stone-200 transition hover:border-stone-600 hover:bg-stone-800 hover:text-white"
@@ -150,8 +175,97 @@ export function EditorToolbar({
             Publicado
           </span>
         ) : null}
+
+        {/* Separador antes de los controles de cuenta: a la izquierda quedan
+            las acciones del SITIO, a la derecha lo que no es del editor. */}
+        <div className="mx-1 h-4 w-[1px] bg-stone-800" />
+
+        <AdminLink href={adminHref} />
+
+        <SettingsLink href={settingsHref} />
+
+        <UserMenu
+          fullName={userFullName}
+          email={userEmail}
+          onLogout={onLogout}
+        />
       </div>
     </header>
+  );
+}
+
+/**
+ * Enlace al panel de administracion.
+ *
+ * Se llama "Administracion" y no "Mensajes" porque la pantalla va a crecer: la
+ * agenda y otras herramientas del dia a dia viviran aqui. Nombrarla por su
+ * primer contenido obligaria a renombrarla (y a que el cliente reaprendiera
+ * donde esta cada cosa) en cuanto se añada la segunda seccion.
+ */
+function AdminLink({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      title="Administración: mensajes, agenda y otras herramientas de tu web"
+      className="flex items-center gap-1.5 rounded-xl border border-stone-700 px-3 py-1.5 text-xs font-bold text-stone-200 transition hover:border-stone-600 hover:bg-stone-800 hover:text-white"
+    >
+      <LayoutDashboard className="h-3.5 w-3.5" />
+      Administración
+    </a>
+  );
+}
+
+/** Enlace a la configuracion del sitio. Sustituye al enlace del sidebar. */
+function SettingsLink({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      title="Configuracion del sitio: dominio, plan y cobros"
+      className="flex items-center gap-1.5 rounded-xl border border-stone-700 px-3 py-1.5 text-xs font-bold text-stone-200 transition hover:border-stone-600 hover:bg-stone-800 hover:text-white"
+    >
+      <Settings className="h-3.5 w-3.5" />
+      Configuracion
+    </a>
+  );
+}
+
+/**
+ * Cuenta del usuario.
+ *
+ * El nombre se trunca porque es texto del cliente y puede ser largo: sin
+ * `max-w` empujaria fuera de la toolbar los botones de publicar.
+ */
+function UserMenu({
+  fullName,
+  email,
+  onLogout,
+}: {
+  fullName: string;
+  email: string;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="hidden max-w-[140px] text-right leading-tight lg:block"
+        title={email}
+      >
+        <p className="truncate text-[11px] font-semibold text-white">
+          {fullName}
+        </p>
+        <p className="truncate text-[10px] text-stone-500">{email}</p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onLogout}
+        title="Cerrar sesion"
+        className="flex items-center gap-1.5 rounded-xl border border-stone-700 px-3 py-1.5 text-xs font-bold text-stone-300 transition hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
+      >
+        <LogOut className="h-3.5 w-3.5" />
+        Salir
+      </button>
+    </div>
   );
 }
 
@@ -199,10 +313,10 @@ function PrimaryAction({
  * direccion sin tener que buscarla.
  */
 function SiteLink({ domain }: { domain: string }) {
-  const isLocal = !domain.startsWith("http") && domain.endsWith(".test");
-  const url = domain.startsWith("http")
-    ? domain
-    : `${isLocal ? "http" : "https"}://${domain}`;
+  // El protocolo lo decide `buildSiteUrl`, no este componente: era logica
+  // duplicada que se desincronizaba con la de Configuracion. Esa funcion ya
+  // respeta un dominio propio (HTTPS) y un host local (HTTP).
+  const url = buildSiteUrl(domain);
 
   return (
     <a

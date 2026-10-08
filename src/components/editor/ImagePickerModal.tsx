@@ -33,13 +33,36 @@ export function ImagePickerModal({
   currentUrl,
   onSelect,
   onClose,
+  galleryOnly = false,
+  onSelectImage,
 }: {
   currentUrl: string;
   onSelect: (url: string) => void;
   onClose: () => void;
+  /**
+   * Oculta la pestaña "Por defecto" y restringe la eleccion a la galeria
+   * propia.
+   *
+   * Se usa para el banner y el icono del sitio. Esos campos guardan una
+   * REFERENCIA (`bannerImageId`/`iconImageId`), y las imagenes por defecto son
+   * URLs de Unsplash SIN fila en la galeria: no tienen ID que guardar. Sin este
+   * modo, elegir una por defecto daria un valor que el backend rechazaria.
+   *
+   * Los bloques de las paginas SI aceptan las por defecto, porque ahi se guarda
+   * una URL suelta: por eso el modo es opcional y no el comportamiento general.
+   */
+  galleryOnly?: boolean;
+  /**
+   * Igual que `onSelect`, pero entrega la imagen ENTERA.
+   *
+   * Necesario para el banner y el icono: el backend exige el ID, no la URL.
+   * Se ofrece aparte de `onSelect` para no romper a los llamadores que ya
+   * trabajan con URLs (los bloques del editor).
+   */
+  onSelectImage?: (image: TenantImage) => void;
 }) {
   const [tab, setTab] = useState<Tab>(
-    currentUrl.includes("/tenants/") ? "mine" : "defaults",
+    galleryOnly || currentUrl.includes("/tenants/") ? "mine" : "defaults",
   );
   const [images, setImages] = useState<TenantImage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,7 +114,14 @@ export function ImagePickerModal({
       const created = await uploadImageFile(file);
       // La imagen recien subida se selecciona directamente: el cliente ya sabe
       // que la quiere, obligarle a buscarla en la galeria es un paso de mas.
+      //
+      // Se llama a AMBOS: `onSelect` para los llamadores que trabajan con URLs
+      // (los bloques de las paginas) y `onSelectImage` para los que necesitan
+      // el ID (banner e icono). Antes solo se llamaba a `onSelect`, asi que
+      // subir una imagen NUEVA para el banner cerraba el modal sin guardar
+      // nada: el ID nunca llegaba al backend.
       onSelect(created.url);
+      onSelectImage?.(created);
       onClose();
     } catch (caught) {
       setError(getErrorMessage(caught, "No pudimos subir la imagen."));
@@ -165,7 +195,8 @@ export function ImagePickerModal({
           </button>
         </div>
 
-        {/* Pestanas */}
+        {/* Pestanas. En modo `galleryOnly` no se pinta la de por defecto: el
+            campo destino guarda un ID, y esas imagenes no lo tienen. */}
         <div className="flex gap-1 border-b border-stone-800 px-5">
           <TabButton
             active={tab === "mine"}
@@ -173,12 +204,14 @@ export function ImagePickerModal({
             label="Mis imagenes"
             count={images.length}
           />
-          <TabButton
-            active={tab === "defaults"}
-            onClick={() => setTab("defaults")}
-            label="Por defecto"
-            count={defaults.length}
-          />
+          {!galleryOnly ? (
+            <TabButton
+              active={tab === "defaults"}
+              onClick={() => setTab("defaults")}
+              label="Por defecto"
+              count={defaults.length}
+            />
+          ) : null}
         </div>
 
         {error ? (
@@ -253,6 +286,9 @@ export function ImagePickerModal({
                       selected={image.url === currentUrl}
                       onSelect={() => {
                         onSelect(image.url);
+                        // `onSelectImage` entrega la fila entera (con su ID),
+                        // que es lo que necesitan banner e icono.
+                        onSelectImage?.(image);
                         onClose();
                       }}
                       onDelete={() => void handleDelete(image.id)}

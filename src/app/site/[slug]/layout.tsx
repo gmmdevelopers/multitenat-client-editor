@@ -3,7 +3,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect } from "react";
-import { buildTenantDomain } from "@/lib/tenant-domain";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 
 export default function DashboardLayout({
@@ -11,7 +10,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, tenant, loading, logout } = useAuth();
+  const { user, tenant, loading } = useAuth();
   const router = useRouter();
   const params = useParams();
 
@@ -40,66 +39,29 @@ export default function DashboardLayout({
   if (!user || !tenant) return null;
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
-      <aside className="w-64 border-r border-gray-800 bg-gray-950 flex flex-col justify-between p-4">
-        <div>
-          <div className="mb-8 border-b border-gray-800 pb-4">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-              Organización
-            </h2>
-            <p className="text-lg font-bold text-white truncate">
-              {tenant.name}
-            </p>
-            <span className="inline-block mt-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
-              {buildTenantDomain(tenant.slug)}
-            </span>
-          </div>
+    // Sin sidebar: la navegacion (configuracion, usuario, salir) vive ahora en
+    // la toolbar del editor. El panel lateral ocupaba 256px permanentes para
+    // solo dos enlaces, que es espacio que le falta al lienzo.
+    //
+    // `h-screen` se mantiene aqui porque este contenedor SI define la altura de
+    // la ventana; el editor usa `h-full` para no sumar altura otra vez.
+    <div className="flex h-screen flex-col overflow-hidden bg-gray-900 text-white">
+      {/* Aviso de correo sin confirmar. Va arriba del todo para que aparezca en
+          todas las pantallas del panel sin que cada una deba incluirlo. */}
+      <EmailVerificationBanner />
 
-          <nav className="space-y-1">
-            <a
-              href={`/site/${tenant.slug}/editor`}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
-            >
-              Editor
-            </a>
-            <a
-              href={`/site/${tenant.slug}/settings`}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
-            >
-              Configuración & Dominio PRO
-            </a>
-          </nav>
-        </div>
+      {/*
+        `min-h-0` + `flex-1` son lo que permite que el hijo encoja dentro del
+        flex en vez de desbordar. Sin ellos, una pantalla larga (Configuracion,
+        con sus siete secciones) se recortaba contra el `overflow-hidden` del
+        padre y no habia forma de bajar a ver el resto: el contenido estaba, pero
+        era inalcanzable.
 
-        <div className="border-t border-gray-800 pt-4 flex items-center justify-between">
-          <div className="truncate">
-            <p className="text-sm font-medium text-white truncate">
-              {user.fullName}
-            </p>
-            <p className="text-xs text-gray-500 truncate">{user.email}</p>
-          </div>
-          <button
-            onClick={logout}
-            className="text-xs text-red-400 hover:text-red-300 transition"
-          >
-            Salir
-          </button>
-        </div>
-      </aside>
-
-      {/* Contenedor de la vista: el hijo maneja su propio scroll interno.
-          `min-h-0` evita que un hijo con altura fija desborde el flex. */}
-      {/* `min-h-0` permite que el hijo encoja dentro del flex, y `overflow-y-auto`
-          hace scrolleable el contenido largo (por ejemplo Configuración) sin
-          tocar el sidebar, que queda fijo. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-gray-900">
-        {/* Aviso de correo sin confirmar. Va arriba del todo y fuera del hijo,
-            para que aparezca en todas las pantallas del panel sin que cada una
-            tenga que acordarse de incluirlo. */}
-        <EmailVerificationBanner />
-
-        {children}
-      </div>
+        El scroll lo aporta CADA pantalla (Configuracion usa `overflow-y-auto`),
+        no este contenedor: el editor necesita `h-full` sin scroll propio para
+        poder gestionar el suyo en el canvas.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </div>
   );
 }

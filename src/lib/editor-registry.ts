@@ -27,6 +27,50 @@ export const ORGANISMS_REGISTRY: ComponentRegistryEntry[] = getRegistryComponent
 );
 
 /**
+ * Utilidades: componentes que aportan FUNCIONALIDAD, no contenido.
+ *
+ * Un boton flotante de WhatsApp o un formulario de contacto no ocupan un lugar
+ * en el flujo de la pagina como un hero o una seccion de servicios: se
+ * configuran (numero, campos, posicion) y actuan sobre la pagina entera.
+ *
+ * Se guardan como bloques, igual que los organismos, pero el canvas los pinta
+ * en una capa aparte: un elemento `fixed` dentro de un contenedor con
+ * `overflow` recortado y `transform` de zoom quedaria anclado al lienzo
+ * escalado en vez de a la ventana.
+ */
+export const UTILITIES_REGISTRY: ComponentRegistryEntry[] =
+  getRegistryComponents({ category: "utilities" });
+
+/** Nombres de las utilidades, para separarlas de los bloques del flujo. */
+export const UTILITY_NAMES = new Set(
+  UTILITIES_REGISTRY.map((entry) => entry.meta.name),
+);
+
+/** `true` si el bloque es una utilidad y no contenido de la pagina. */
+export function isUtilityBlock(metaName: string): boolean {
+  return UTILITY_NAMES.has(metaName);
+}
+
+/**
+ * Cabeceras del design system, que muestran el logo del sitio.
+ *
+ * Vive aqui y no en cada renderizador para que el editor y la web publica usen
+ * LA MISMA lista: son dos sitios distintos que deben mostrar el logo igual, y
+ * dos listas copiadas acabarian divergiendo (una con la cabecera nueva y la
+ * otra sin ella) sin que nada lo avisara.
+ *
+ * Se identifican por nombre porque las props del bloque vienen del editor y el
+ * cliente no elige ahi su logo: es un dato del SITIO, y se inyecta al renderizar.
+ */
+export const HEADER_BLOCKS = new Set([
+  "MedicalHeader",
+  "DentistHeader",
+  "SkincareHeader",
+  "InteractiveSiteHeader",
+  "SiteHeader",
+]);
+
+/**
  * Organismos aplicables a un vertical concreto.
  *
  * Un organismo transversal (sin `siteTypes`) aparece en todos los tabs, porque
@@ -101,10 +145,27 @@ export const ORGANISMS_MAP = new Map<string, ComponentRegistryEntry>(
   ORGANISMS_REGISTRY.map((entry) => [entry.meta.name, entry]),
 );
 
+/**
+ * Todo lo que puede guardarse como bloque en una pagina.
+ *
+ * Se construye con `getRegistryComponents()` SIN filtro de categoria, en vez de
+ * concatenar listas: los formularios son MOLECULAS (`ContactForm`,
+ * `AppointmentForm`) y una lista que solo juntara organismos y utilidades los
+ * dejaba fuera. El sintoma era silencioso: el bloque existia en la base, pero
+ * `PageRenderer` no lo encontraba en el mapa y la pagina se pintaba sin el
+ * formulario, sin ningun error.
+ *
+ * Al no filtrar, un componente nuevo de cualquier categoria pasa a ser
+ * renderizable sin tocar este archivo.
+ */
+export const ALL_BLOCKS_MAP = new Map<string, ComponentRegistryEntry>(
+  getRegistryComponents().map((entry) => [entry.meta.name, entry]),
+);
+
 export function getDefaultPropsForOrganism(
   metaName: string,
 ): Record<string, any> {
-  const entry = ORGANISMS_MAP.get(metaName);
+  const entry = ALL_BLOCKS_MAP.get(metaName);
   if (!entry) return {};
 
   const props: Record<string, any> = {};

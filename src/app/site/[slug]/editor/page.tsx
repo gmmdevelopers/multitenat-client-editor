@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { Canvas } from "@/components/editor/Canvas";
 import { SiteNotPublishedBanner } from "@/components/editor/SiteNotPublishedBanner";
+import { ContactEmailMissingBanner } from "@/components/editor/ContactEmailMissingBanner";
 import { PropertiesPanel } from "@/components/editor/PropertiesPanel";
 import { OrganismTooltipPreview } from "@/components/editor/OrganismTooltipPreview";
 import { useEditorStore } from "@/hooks/useEditorStore";
@@ -15,6 +16,8 @@ import {
   templateToBlocks,
 } from "@/lib/editor-registry";
 import { TemplateGallery } from "@/components/editor/TemplateGallery";
+import { PalettePanel } from "@/components/editor/PalettePanel";
+import { UtilitiesPanel } from "@/components/editor/UtilitiesPanel";
 import type { ComponentRegistryEntry } from "@multitenant/design-system";
 import { useAuth } from "@/context/AuthContext";
 import type { Plan } from "@multitenant/design-system";
@@ -41,15 +44,28 @@ import { CreatePageModal } from "@/components/editor/CreatePageModal";
 import type { PageSummary } from "@/types/site";
 import { ViewportMode } from "@/components/editor/ViewportSelector";
 import { storePreviewPalette } from "@/lib/preview-palette";
+import type { CustomPalette } from "@multitenant/design-system";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage } from "@/lib/api/errors";
 
 export default function PageBuilderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const routeParams = useParams<{ slug: string }>();
+  const ownerSlugFromRoute = routeParams?.slug ?? "";
   const pageId = searchParams.get("pageId");
   const toast = useToast();
-  const { tenant } = useAuth();
+  const { tenant, user, logout } = useAuth();
+
+  /**
+   * Slug con el que se construyen las rutas del panel.
+   *
+   * `tenant.slug` es la fuente de verdad (el layout ya redirige si la URL no
+   * coincide), pero durante el primer render puede no estar hidratado: el slug
+   * de la ruta es el fallback para que el enlace a Configuracion no salga
+   * apuntando a `/site//settings`.
+   */
+  const ownerSlug = tenant?.slug ?? ownerSlugFromRoute;
 
   const [zoom, setZoom] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,6 +85,13 @@ export default function PageBuilderPage() {
   const [sitePalette, setSitePalette] = useState<unknown>(null);
   /** Vertical del sitio, que decide los colores por defecto. */
   const [siteType, setSiteType] = useState<string | undefined>(undefined);
+  /**
+   * Logo del sitio (el icono de Configuracion), para las cabeceras del canvas.
+   *
+   * Se rellena con la respuesta del editor, igual que la paleta: venir de otra
+   * peticion podria dar un canvas con un logo y una web con otro.
+   */
+  const [siteIconUrl, setSiteIconUrl] = useState<string | null>(null);
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
@@ -91,6 +114,14 @@ export default function PageBuilderPage() {
   /** Subdominio del sitio (`mi-clinica`), para mostrar su URL en la toolbar. */
   const [siteDomain, setSiteDomain] = useState<string | null>(null);
   const [siteCustomDomain, setSiteCustomDomain] = useState<string | null>(null);
+  /**
+   * Buzon de los formularios del sitio, o `null` si no esta configurado.
+   *
+   * Se usa para avisar en el editor de que los mensajes se guardan pero no se
+   * envian por correo. El fallo seria invisible: el formulario responde bien al
+   * visitante y el mensaje queda en la base, pero nadie se entera.
+   */
+  const [siteContactEmail, setSiteContactEmail] = useState<string | null>(null);
   /** El correo sin verificar impide publicar; el boton lo avisa antes. */
   const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
 
@@ -111,7 +142,7 @@ export default function PageBuilderPage() {
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [activeTab, setActiveTab] = useState<OrganismTab>("all");
   const [sidebarMode, setSidebarMode] = useState<
-    "pages" | "sections" | "templates"
+    "pages" | "sections" | "templates" | "palette" | "utilities"
   >("sections");
 
   // El plan del tenant decide si aparecen las capacidades premium
@@ -200,11 +231,13 @@ export default function PageBuilderPage() {
           setIsSitePublished(page.site.isPublished);
           setSiteDomain(page.site.domain);
           setSiteCustomDomain(page.site.customDomain);
+          setSiteContactEmail(page.site.contactEmail ?? null);
           // La paleta se rellena de la respuesta del editor y no de una
           // peticion aparte: si no coincidieran, el canvas pintaria un tema y
           // la web publicada otro.
           setSitePalette(page.site.palette ?? null);
           setSiteType(page.site.siteType ?? undefined);
+          setSiteIconUrl(page.site.iconImageUrl ?? null);
           storePreviewPalette({
             palette: page.site.palette ?? null,
             siteType: page.site.siteType ?? null,
@@ -229,9 +262,110 @@ export default function PageBuilderPage() {
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
 
+  /**
+   * Refresca el estado del SITIO al volver a la pestana del editor.
+   *
+   * El cliente configura su correo de contacto en Configuracion y vuelve con el
+   * enlace de la toolbar. Como es la MISMA ruta, Next no remonta la pagina y el
+   * efecto de carga no se vuelve a ejecutar: el aviso "tus formularios no estan
+   * avisando a nadie" seguia apareciendo aunque el correo ya estuviera guardado.
+   *
+   * Se recarga SOLO el estado del sitio (nunca los bloques) para no pisar los
+   * cambios sin guardar del cliente: `loadBlocks` sobrescribiria su trabajo.
+   */
+  useEffect(() => {
+    if (!pageId) return;
+
+    function refreshSiteState() {
+      if (document.visibilityState !== "visible") return;
+
+      void getPageForEditor(pageId!)
+        .then((page) => {
+          if (!page.site) return;
+
+          setIsSitePublished(page.site.isPublished);
+          setSiteDomain(page.site.domain);
+          setSiteCustomDomain(page.site.customDomain);
+          setSiteContactEmail(page.site.contactEmail ?? null);
+          setSitePalette(page.site.palette ?? null);
+          setSiteType(page.site.siteType ?? undefined);
+        })
+        .catch(() => {
+          // Es un refresco de cortesia: si falla, se conserva lo que ya habia.
+        });
+    }
+
+    document.addEventListener("visibilitychange", refreshSiteState);
+    // `focus` ademas de `visibilitychange`: al volver de Configuracion con un
+    // enlace del propio panel la pestana nunca se oculta, asi que
+    // `visibilitychange` no se dispara y el aviso se quedaria obsoleto.
+    window.addEventListener("focus", refreshSiteState);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshSiteState);
+      window.removeEventListener("focus", refreshSiteState);
+    };
+  }, [pageId]);
+
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.1, 1.5));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.1, 0.4));
   const handleResetZoom = () => setZoom(1);
+
+  /**
+   * Aplica una paleta al lienzo al instante, sin guardarla.
+   *
+   * El canvas ya pinta con `paletteCssVariables`, asi que adelantar el color
+   * aqui es todo lo que hace falta para la vista en vivo. Guardar es una accion
+   * aparte: el cliente debe poder probar colores sin tocar su web publicada.
+   */
+  function handlePreviewPalette(next: CustomPalette | null) {
+    setSitePalette(next);
+
+    // El preview (pestana nueva) no comparte estado de React: lee la paleta de
+    // localStorage. Si no se actualizara aqui, la vista previa mostraria la
+    // paleta vieja mientras el lienzo muestra la nueva.
+    storePreviewPalette({ palette: next, siteType: siteType ?? null });
+  }
+
+  /**
+   * Recarga el sitio tras guardar la paleta.
+   *
+   * Se vuelve a leer del servidor en vez de confiar en el estado local: el
+   * backend MEZCLA los settings (no los reemplaza), asi que lo guardado puede no
+   * ser identico a lo enviado.
+   */
+  async function handlePaletteSaved() {
+    if (!pageId) return;
+
+    try {
+      const page = await getPageForEditor(pageId);
+      if (!page.site) return;
+
+      setSitePalette(page.site.palette ?? null);
+      setSiteType(page.site.siteType ?? undefined);
+      storePreviewPalette({
+        palette: page.site.palette ?? null,
+        siteType: page.site.siteType ?? null,
+      });
+    } catch (err) {
+      toast.error(
+        getErrorMessage(err, "La paleta se guardo, pero no se pudo recargar."),
+      );
+    }
+  }
+
+  /**
+   * Activa una utilidad.
+   *
+   * `addOrganism` ya deja el bloque nuevo como seleccionado, que es lo que
+   * necesita el cliente: el siguiente paso es escribir el numero de telefono en
+   * el panel de propiedades, y el bloque no se ve en el canvas (vive en su
+   * propia capa), asi que no habria forma de seleccionarlo a mano.
+   */
+  function handleAddUtility(metaName: string) {
+    addOrganism(metaName);
+    toast.info("Configura la utilidad en el panel de la derecha.");
+  }
 
   async function handleSaveDraft() {
     if (!pageId) return;
@@ -503,6 +637,11 @@ export default function PageBuilderPage() {
         siteDomain={siteDomain}
         customDomain={siteCustomDomain}
         needsEmailVerification={needsEmailVerification}
+        settingsHref={`/site/${ownerSlug}/settings`}
+        adminHref={`/site/${ownerSlug}/admin`}
+        userFullName={user?.fullName ?? ""}
+        userEmail={user?.email ?? ""}
+        onLogout={() => void logout()}
       />
 
       {/* Aviso de sitio sin publicar. Va justo bajo la toolbar, antes de la
@@ -515,6 +654,15 @@ export default function PageBuilderPage() {
           needsEmailVerification={needsEmailVerification}
           isPublishing={isPublishing}
           onPublish={handlePublishSite}
+        />
+      ) : null}
+
+      {/* Aviso de formularios sin buzon. Va junto al de publicacion: son los dos
+          "esto existe pero no funciona como esperas", y el cliente los necesita
+          ver antes de dar su web por terminada. */}
+      {!siteContactEmail ? (
+        <ContactEmailMissingBanner
+          settingsHref={`/site/${ownerSlug}/settings`}
         />
       ) : null}
 
@@ -537,110 +685,179 @@ export default function PageBuilderPage() {
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Sidebar Izquierdo */}
-        <aside className="w-72 shrink-0 border-r border-stone-800 bg-stone-900/50 p-4 overflow-y-auto">
-          {/* Tres modos: gestionar paginas, anadir bloques o partir de plantilla. */}
-          <div className="mb-3 flex rounded-xl bg-stone-950/60 p-1">
-            <button
-              type="button"
-              onClick={() => setSidebarMode("pages")}
-              className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                sidebarMode === "pages"
-                  ? "bg-stone-800 text-white"
-                  : "text-stone-400 hover:text-white"
-              }`}
-            >
-              Páginas
-            </button>
-            <button
-              type="button"
-              onClick={() => setSidebarMode("sections")}
-              className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                sidebarMode === "sections"
-                  ? "bg-stone-800 text-white"
-                  : "text-stone-400 hover:text-white"
-              }`}
-            >
-              Secciones
-            </button>
-            <button
-              type="button"
-              onClick={() => setSidebarMode("templates")}
-              className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                sidebarMode === "templates"
-                  ? "bg-amber-400 text-black"
-                  : "text-stone-400 hover:text-white"
-              }`}
-            >
-              Templates
-            </button>
+        {/*
+          Sidebar Izquierdo.
+
+          El scroll NO vive aqui: cada panel decide el suyo. Antes el `aside`
+          entero scrolleaba (`overflow-y-auto` + `p-4`), asi que al bajar por la
+          lista de secciones o templates se arrastraban tambien el buscador y
+          los tabs de arriba, que deben quedar siempre a la vista.
+
+          `min-h-0` + `overflow-hidden` son lo que permite que el hijo scrollee
+          en lugar del contenedor: sin `min-h-0`, un flex item no puede encoger
+          por debajo del tamano de su contenido y el hijo nunca llegaria a ser
+          scrolleable.
+        */}
+        <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-stone-800 bg-stone-900/50">
+          {/* Tabs de modo. Van fijos arriba, fuera de cualquier area scrolleable. */}
+          <div className="shrink-0 p-4 pb-3">
+            <div className="flex rounded-xl bg-stone-950/60 p-1">
+              <button
+                type="button"
+                onClick={() => setSidebarMode("pages")}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                  sidebarMode === "pages"
+                    ? "bg-stone-800 text-white"
+                    : "text-stone-400 hover:text-white"
+                }`}
+              >
+                Páginas
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarMode("sections")}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                  sidebarMode === "sections"
+                    ? "bg-stone-800 text-white"
+                    : "text-stone-400 hover:text-white"
+                }`}
+              >
+                Secciones
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarMode("templates")}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                  sidebarMode === "templates"
+                    ? "bg-amber-400 text-black"
+                    : "text-stone-400 hover:text-white"
+                }`}
+              >
+                Templates
+              </button>
+              <button
+                type="button"
+                data-sidebar-mode="palette"
+                onClick={() => setSidebarMode("palette")}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                  sidebarMode === "palette"
+                    ? "bg-amber-400 text-black"
+                    : "text-stone-400 hover:text-white"
+                }`}
+              >
+                Paleta
+              </button>
+              <button
+                type="button"
+                data-sidebar-mode="utilities"
+                onClick={() => setSidebarMode("utilities")}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                  sidebarMode === "utilities"
+                    ? "bg-amber-400 text-black"
+                    : "text-stone-400 hover:text-white"
+                }`}
+              >
+                Utilidades
+              </button>
+            </div>
           </div>
 
           {sidebarMode === "pages" ? (
-            <PagesPanel
-              pages={pages}
-              activePageId={pageId}
-              isLoading={isLoadingPages}
-              onOpen={handleOpenPage}
-              onDelete={setPendingDelete}
-              onCreate={handleCreatePage}
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <PagesPanel
+                pages={pages}
+                activePageId={pageId}
+                isLoading={isLoadingPages}
+                onOpen={handleOpenPage}
+                onDelete={setPendingDelete}
+                onCreate={handleCreatePage}
+              />
+            </div>
           ) : sidebarMode === "sections" ? (
+            /* Secciones: los tabs de vertical quedan fijos y solo scrollea la
+               lista de organismos. */
             <>
-          <OrganismTabs
-            active={activeTab}
-            onChange={setActiveTab}
-            counts={tabCounts}
-          />
+              <div className="shrink-0 px-4">
+                <OrganismTabs
+                  active={activeTab}
+                  onChange={setActiveTab}
+                  counts={tabCounts}
+                />
+              </div>
 
-          <div className="flex flex-col gap-2">
-            {/* Capacidades premium: se anuncian pero no se pueden usar hasta
-                subir de plan. Ocultarlas del todo escondería el upgrade. */}
-            {lockedOrganisms.length > 0 ? (
-              <div className="mt-2 rounded-xl border-dashed border-amber-400/30 bg-amber-400/5 p-3">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-300">
-                  Disponible en plan Pro
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  {lockedOrganisms.map(({ meta }) => (
-                    <div
-                      key={meta.name}
-                      className="flex items-center justify-between rounded-lg bg-stone-950/60 px-2.5 py-1.5"
-                    >
-                      <span className="text-[11px] text-stone-400">
-                        {meta.displayName}
-                      </span>
-                      <span className="text-[10px] text-amber-400">🔒</span>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+                <div className="flex flex-col gap-2">
+                  {/* Capacidades premium: se anuncian pero no se pueden usar
+                      hasta subir de plan. Ocultarlas del todo escondería el
+                      upgrade. */}
+                  {lockedOrganisms.length > 0 ? (
+                    <div className="mt-2 rounded-xl border-dashed border-amber-400/30 bg-amber-400/5 p-3">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                        Disponible en plan Pro
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {lockedOrganisms.map(({ meta }) => (
+                          <div
+                            key={meta.name}
+                            className="flex items-center justify-between rounded-lg bg-stone-950/60 px-2.5 py-1.5"
+                          >
+                            <span className="text-[11px] text-stone-400">
+                              {meta.displayName}
+                            </span>
+                            <span className="text-[10px] text-amber-400">🔒</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                  ) : null}
+                  {visibleOrganisms.map(({ meta }) => (
+                    <OrganismTooltipPreview
+                      key={meta.name}
+                      metaName={meta.name}
+                      displayName={meta.displayName}
+                      description={meta.description || ""}
+                      onAdd={() => addOrganism(meta.name)}
+                    />
                   ))}
+
+                  {visibleOrganisms.length === 0 ? (
+                    <p className="rounded-xl border-dashed border-stone-800 p-4 text-center text-[11px] text-stone-500">
+                      Todavía no hay organismos con diseño para este tipo de sitio.
+                      Puedes usar los del tab <strong>Todos</strong>.
+                    </p>
+                  ) : null}
                 </div>
               </div>
-            ) : null}
-            {visibleOrganisms.map(({ meta }) => (
-              <OrganismTooltipPreview
-                key={meta.name}
-                metaName={meta.name}
-                displayName={meta.displayName}
-                description={meta.description || ""}
-                onAdd={() => addOrganism(meta.name)}
-              />
-            ))}
-
-            {visibleOrganisms.length === 0 ? (
-              <p className="rounded-xl border-dashed border-stone-800 p-4 text-center text-[11px] text-stone-500">
-                Todavía no hay organismos con diseño para este tipo de sitio.
-                Puedes usar los del tab <strong>Todos</strong>.
-              </p>
-            ) : null}
-          </div>
             </>
+          ) : sidebarMode === "templates" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <TemplateGallery
+                plan={tenantPlan}
+                busy={isLoadingPage}
+                onApplyToCurrent={handleApplyTemplate}
+                onCreatePage={handleCreatePageFromTemplate}
+              />
+            </div>
+          ) : sidebarMode === "palette" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <PalettePanel
+                siteId={activeSiteId}
+                palette={sitePalette}
+                siteType={siteType}
+                onPreview={handlePreviewPalette}
+                onSaved={handlePaletteSaved}
+              />
+            </div>
           ) : (
-            <TemplateGallery
-              plan={tenantPlan}
-              busy={isLoadingPage}
-              onApplyToCurrent={handleApplyTemplate}
-              onCreatePage={handleCreatePageFromTemplate}
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <UtilitiesPanel
+                blocks={blocks}
+                selectedBlockId={selectedBlockId}
+                onAdd={handleAddUtility}
+                onRemove={deleteBlock}
+                onSelect={setSelectedBlockId}
+              />
+            </div>
           )}
         </aside>
 
@@ -658,6 +875,7 @@ export default function PageBuilderPage() {
           onFocusField={focusField}
           palette={sitePalette}
           siteType={siteType}
+          logoUrl={siteIconUrl}
         />
 
         {/* Sidebar Derecho */}

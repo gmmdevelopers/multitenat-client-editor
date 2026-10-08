@@ -19,8 +19,9 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { RotateCcw } from "lucide-react";
 
-import { ORGANISMS_MAP, getDefaultPropsForOrganism } from "@/lib/editor-registry";
+import { ALL_BLOCKS_MAP, HEADER_BLOCKS, getDefaultPropsForOrganism, isUtilityBlock } from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "./connected-organisms";
+import { UtilityLayer } from "./UtilityLayer";
 import { useSitePaletteTokens } from "@/components/SiteThemeProvider";
 import { paletteCssVariables } from "@multitenant/design-system";
 import { BlockInstance } from "@/types/editor-state";
@@ -43,6 +44,14 @@ interface CanvasProps {
   palette?: unknown;
   /** Vertical del sitio, que decide los colores por defecto. */
   siteType?: string;
+  /**
+   * Logo del sitio (el icono de Configuracion), para las cabeceras.
+   *
+   * Igual que `palette` y `siteType`: son datos del SITIO, no de un bloque, y
+   * el lienzo los necesita para mostrar lo mismo que se vera publicado. Sin
+   * esto, el cliente subiria su logo y no lo veria en el editor.
+   */
+  logoUrl?: string | null;
 }
 
 function SortableBlock({
@@ -52,6 +61,7 @@ function SortableBlock({
   onDeleteBlock,
   onResetBlock,
   onFocusField,
+  logoUrl,
 }: {
   block: BlockInstance;
   isSelected: boolean;
@@ -59,6 +69,7 @@ function SortableBlock({
   onDeleteBlock: (id: string) => void;
   onResetBlock: (id: string) => void;
   onFocusField: (fieldKey: string | null) => void;
+  logoUrl?: string | null;
 }) {
   const {
     attributes,
@@ -174,7 +185,7 @@ function SortableBlock({
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const registryEntry = ORGANISMS_MAP.get(block.metaName);
+  const registryEntry = ALL_BLOCKS_MAP.get(block.metaName);
   if (!registryEntry) return null;
 
   // Algunos organismos necesitan logica de cliente (la agenda habla con la
@@ -276,6 +287,12 @@ function SortableBlock({
       <Component
         {...getDefaultPropsForOrganism(block.metaName)}
         {...block.props}
+        // El logo se inyecta DESPUES de las props: es un dato del SITIO, no del
+        // bloque, y el cliente no lo edita aqui. Si fuera entre las props, un
+        // `logoUrl` guardado en el bloque (de una version vieja) lo pisaria.
+        {...(HEADER_BLOCKS.has(block.metaName)
+          ? { logoUrl: logoUrl ?? undefined }
+          : {})}
       />
 
       {/* Botones de acción flotantes (Reset + Eliminar) */}
@@ -319,8 +336,19 @@ export function Canvas({
   onFocusField,
   palette,
   siteType,
+  logoUrl,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Bloques que SI son contenido de la pagina.
+   *
+   * Las utilidades (boton flotante de WhatsApp) se guardan como bloques para
+   * reutilizar el guardado y el panel de propiedades, pero no ocupan un lugar
+   * en el flujo: se pintan en `UtilityLayer`. Si se dejaran aqui, aparecerian
+   * como una seccion vacia y arrastrable en medio del contenido.
+   */
+  const flowBlocks = blocks.filter((block) => !isUtilityBlock(block.metaName));
 
   const paletteTokens = useSitePaletteTokens(palette, siteType);
 
@@ -385,10 +413,10 @@ export function Canvas({
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={blocks.map((b) => b.id)}
+            items={flowBlocks.map((b) => b.id)}
             strategy={verticalListSortingStrategy}
           >
-            {blocks.map((block) => (
+            {flowBlocks.map((block) => (
               <SortableBlock
                 key={block.id}
                 block={block}
@@ -397,18 +425,33 @@ export function Canvas({
                 onDeleteBlock={onDeleteBlock}
                 onResetBlock={onResetBlock}
                 onFocusField={onFocusField}
+                logoUrl={logoUrl}
               />
             ))}
           </SortableContext>
         </DndContext>
 
-        {blocks.length === 0 && (
+        {flowBlocks.length === 0 && (
           <div className="rounded-2xl border border-dashed border-stone-800 p-12 text-center text-xs text-stone-500 my-4 mx-4">
             No hay secciones agregadas. Selecciona un organismo del panel
             izquierdo para comenzar.
           </div>
         )}
       </div>
+
+      {/*
+        Capa de UTILIDADES.
+
+        Va FUERA del contenedor escalado para que no herede el `transform` del
+        zoom (que desplazaria el anclaje), pero en modo `contained`: dentro del
+        editor el boton se ancla a ESTE contenedor, no a la ventana.
+
+        Con `fixed` aparecia sobre los paneles del editor, incluido el de
+        propiedades, y quien disenaba lo veia como parte de su web cuando en
+        realidad es interfaz. En la web publicada se monta desde
+        `PageRenderer`, que si usa `fixed`.
+      */}
+      <UtilityLayer blocks={blocks} contained />
     </main>
   );
 }

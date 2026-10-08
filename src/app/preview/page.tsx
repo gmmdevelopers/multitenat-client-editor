@@ -82,7 +82,15 @@ function PreviewContent() {
     // ella, el preview (que abre en OTRA pestana, con otro estado de React)
     // pintaria con los colores por defecto y no coincidiria con el canvas.
     <SiteThemeProvider palette={sitePalette} siteType={siteType ?? undefined}>
-      <PageRenderer blocks={blocks} />
+      {/*
+        `interactive`: el preview es una vista REAL del resultado, asi que los
+        formularios deben poder rellenarse. Es la unica forma de comprobar que el
+        envio funciona antes de publicar.
+
+        El editor (canvas) los deja en modo diseno; aqui no, porque este es
+        justamente el sitio donde se prueba.
+      */}
+      <PageRenderer blocks={blocks} interactive pagePath="/preview" />
     </SiteThemeProvider>
   );
 }

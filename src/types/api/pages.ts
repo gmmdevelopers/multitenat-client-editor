@@ -82,6 +82,21 @@ export interface GetPageForEditorResponse {
     palette?: Partial<CustomPalette> | null;
     /** Vertical del sitio, que decide los colores por defecto. */
     siteType?: string | null;
+    /**
+     * Buzon de los formularios, o `null` si el cliente aun no lo configuro.
+     *
+     * El editor lo usa para avisar: sin buzon, los formularios guardan los
+     * mensajes pero no avisan a nadie.
+     */
+    contactEmail?: string | null;
+    /**
+     * URL del icono del sitio, o `null` si el cliente no subio uno.
+     *
+     * El editor lo necesita para pintar el logo en las cabeceras del lienzo:
+     * sin esto, el cliente subia su logo en Configuracion y no lo veia mientras
+     * editaba, que parece que la subida no funciono.
+     */
+    iconImageUrl?: string | null;
   } | null;
 }
 
