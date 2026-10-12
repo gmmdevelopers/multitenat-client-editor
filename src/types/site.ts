@@ -61,6 +61,13 @@ export interface SiteSettings {
    * una URL suelta). Ver el mismo campo en `SiteSettingsShape` del backend.
    */
   logoUrl?: string;
+  /**
+   * Si el negocio atiende el chat de la app con sus pacientes.
+   *
+   * **Apagado por defecto**: activarlo implica que alguien contesta. Un chat
+   * activo sin nadie detras es peor que no tenerlo.
+   */
+  chatEnabled?: boolean;
   /** Vertical del sitio, que decide los colores por defecto. */
   siteType?: string;
   /** Paleta elegida por el cliente; sobreescribe los colores del vertical. */

@@ -257,6 +257,18 @@ function DepositPolicyContent() {
         </p>
       </header>
 
+      {/* --- Chat con pacientes --- */}
+      {/*
+        El interruptor del chat YA NO VIVE AQUI.
+
+        Se movio a la seccion **Chats**: alli es donde el cliente lo busca, y
+        tenerlo dentro de "Cobro al agendar" obligaba a adivinar que el chat se
+        habilita en la pantalla de pagos.
+
+        Ademas, en su sitio nuevo puede explicar los DOS estados vacios que
+        aqui no se distinguian: "el chat esta desactivado" y "no hay mensajes".
+      */}
+
       {/* --- Conexion de Mercado Pago --- */}
       <section
         data-payments-connection={isConnected ? "connected" : "disconnected"}

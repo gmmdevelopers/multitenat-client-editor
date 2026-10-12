@@ -200,6 +200,19 @@ function PublicPageContent() {
       .catch((err) => {
         if (cancelled) return;
         setBlocks([]);
+
+        /**
+         * Log del error REAL.
+         *
+         * El mensaje de abajo (`No hay una pagina publicada`) se muestra
+         * tambien cuando la peticion FALLA por otro motivo, asi que oculta la
+         * causa: en la WebView el 404 venia de un tenant mal resuelto, no de
+         * que faltara la pagina. Sin este log, los dos casos se ven igual.
+         *
+         * QUITAR cuando se confirme el arreglo.
+         */
+        console.warn("[publico] error al cargar la pagina:", path, err);
+
         setError(
           getErrorMessage(err, `No hay una página publicada en "${path}".`),
         );

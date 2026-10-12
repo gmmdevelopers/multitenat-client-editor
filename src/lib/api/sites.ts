@@ -40,6 +40,12 @@ export interface UpdateSiteRequest {
    */
   depositPolicy?: DepositPolicy;
   /**
+   * Activa el chat con los pacientes en la app.
+   *
+   * Apagado por defecto, a proposito: activarlo implica que alguien contesta.
+   */
+  chatEnabled?: boolean;
+  /**
    * Settings del sitio. El backend los MEZCLA con los existentes: enviar solo
    * `palette` no borra las credenciales de pago que ya hubiera.
    */

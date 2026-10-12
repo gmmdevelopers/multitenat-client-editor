@@ -119,6 +119,36 @@ export async function getPublicPageByPath(
 ): Promise<PublicPageResponse> {
   const { data } = await api.get<PublicPageResponse>("/pages/public/by-path", {
     params: { path },
+    /**
+     * El slug se manda en la CABECERA, leido de la URL.
+     *
+     * ## Por que de la URL y no de la cookie
+     *
+     * La cookie puede ser de una visita ANTERIOR y quedar obsoleta. En la app
+     * movil paso exactamente eso: `x-tenant-slug=192` (de cuando el host era una
+     * IP) **anulaba el `?slug=clinica`** de la URL, y la WebView daba 404 con la
+     * MISMA url que el navegador cargaba bien.
+     *
+     * La URL es una **intencion explicita** de quien navega: si trae `slug`, ese
+     * manda. La cookie queda como respaldo (el cliente ya la pone si no hay
+     * cabecera).
+     */
+    headers: buildSlugHeaders(),
   });
   return data;
+}
+
+/**
+ * Cabecera `x-tenant-slug` a partir del `?slug=` de la URL, si existe.
+ *
+ * Devuelve `{}` cuando no hay query: asi el cliente de la API usa la cookie, que
+ * es el comportamiento de siempre en la web publica normal (subdominio, sin
+ * query).
+ */
+function buildSlugHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+
+  const slug = new URLSearchParams(window.location.search).get("slug");
+
+  return slug ? { "x-tenant-slug": slug } : {};
 }

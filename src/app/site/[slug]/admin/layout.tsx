@@ -10,15 +10,17 @@ import {
   Clock,
   Inbox,
   Menu,
+  MessageSquare,
   Tag,
   UserRound,
   Wallet,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DepositNoticeBanner } from "@/components/DepositNoticeBanner";
 import { useAuth } from "@/context/AuthContext";
+import { getUnreadCount } from "@/lib/api/inbox";
 
 /**
  * Secciones del panel de administración.
@@ -42,6 +44,15 @@ const SECTIONS = [
     href: "services",
     icon: Tag,
     description: "Lo que ofreces, su duración y su precio.",
+  },
+  {
+    // Justo despues de Agenda: es lo que el negocio revisa al llegar, junto al
+    // dia de citas. Bajarla mas la volveria facil de olvidar.
+    key: "chats",
+    label: "Chats",
+    href: "chats",
+    icon: MessageSquare,
+    description: "Mensajes que te escriben tus pacientes desde la app.",
   },
   {
     key: "professionals",
@@ -124,6 +135,40 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(true);
 
+  /**
+   * Mensajes sin leer, para el contador del tab de Chats.
+   *
+   * Se carga aqui, en el layout, y no en la pagina de chats: el sentido del
+   * contador es avisar **sin** estar en la seccion. Si viviera alli, solo lo
+   * verias al entrar, que es cuando ya no hace falta.
+   *
+   * Se refresca cada 30 s: es un panel de trabajo, y una conversacion nueva
+   * debe notarse sin recargar. Un intervalo corto golpearia el backend sin
+   * aportar (un paciente no escribe cada 10 segundos).
+   */
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = () => {
+      void getUnreadCount()
+        .then((count) => {
+          if (!cancelled) setUnread(count);
+        })
+        // Silencioso: un fallo en el contador no debe romper el panel.
+        .catch(() => undefined);
+    };
+
+    load();
+    const timer = setInterval(load, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -189,7 +234,26 @@ export default function AdminLayout({
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {isOpen ? (
-                  <span className="truncate">{section.label}</span>
+                  <span className="flex-1 truncate">{section.label}</span>
+                ) : null}
+
+                {/*
+                  Contador de sin leer, solo en el tab de Chats.
+
+                  Se pinta tambien con el menu cerrado (encima del icono) porque
+                  el aviso es justo para cuando no lo estas mirando.
+                */}
+                {section.key === "chats" && unread > 0 ? (
+                  <span
+                    data-unread-badge={unread}
+                    className={`shrink-0 rounded-full bg-amber-400 text-[10px] font-bold text-black ${
+                      isOpen
+                        ? "px-1.5 py-0.5"
+                        : "absolute right-1.5 top-1.5 h-2 w-2 p-0 text-transparent"
+                    }`}
+                  >
+                    {isOpen ? unread : ""}
+                  </span>
                 ) : null}
               </Link>
             );
