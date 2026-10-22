@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BlockInstance } from "@/types/editor-state";
 import { ALL_BLOCKS_MAP } from "@/lib/editor-registry";
 import { blockAnchorHref } from "@/lib/anchor";
@@ -15,23 +15,32 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
-import * as SimpleIcons from "react-icons/si";
-import * as FontAwesomeIcons from "react-icons/fa";
+import { BUSINESS_ICONS, BUSINESS_ICON_COMPONENTS } from "@multitenant/design-system";
 import { isColorProp, isIconProp, isImageProp, isLinkProp } from "@/utils/InputsTypeHelper";
 import { ImagePickerModal } from "./ImagePickerModal";
 import { NestedList } from "./NestedList";
-
 /**
- * Todos los sets de iconos que soporta `DynamicIcon`.
+ * Los iconos que el panel sabe RESOLVER, y solo esos.
  *
- * El panel debe resolver contra los mismos tres sets que el canvas: resolviendo
- * solo contra lucide, un `FaInstagram` (font-awesome) se mostraba como un icono
- * de interrogacion aunque en la pagina se dibujara bien.
+ * ## Por que no los sets completos
+ *
+ * Antes juntaba `lucide` + `simple-icons` + `font-awesome` enteros. Eso funcionaba
+ * para mostrar el icono elegido, pero tenia dos costes:
+ *
+ *   1. **Inlineaba las tres librerias en el bundle del editor** (~5 MB), y
+ *   2. ofrecia iconos que la web **no puede pintar**: el panel los resolvia aqui
+ *      mismo, pero `DynamicIcon` ya no los conoce, asi que la pagina salia sin
+ *      icono aunque el editor lo mostrara.
+ *
+ * Ahora la lista de marca es `BUSINESS_ICONS`, la MISMA que usa `DynamicIcon`. Si
+ * el panel resuelve un icono, la web tambien.
+ *
+ * Lucide se queda completo porque hace tree-shaking: el resultado del build solo
+ * incluye los que se usan.
  */
 const ALL_ICONS: Record<string, any> = {
   ...(LucideIcons as any),
-  ...(SimpleIcons as any),
-  ...(FontAwesomeIcons as any),
+  ...BUSINESS_ICON_COMPONENTS,
 };
 
 interface PropertiesPanelProps {
@@ -43,6 +52,25 @@ interface PropertiesPanelProps {
 function safeProps(block: BlockInstance): Record<string, any> {
   return block.props && typeof block.props === "object" ? block.props : {};
 }
+
+/**
+ * Los iconos de interfaz de Lucide, sin duplicados.
+ *
+ * ## Por que hay que deduplicar
+ *
+ * `lucide-react` exporta cada icono **tres veces**: `Newspaper`,
+ * `NewspaperIcon` y `LucideNewspaper`. Son 6.356 exports para ~2.100 iconos, y
+ * en el selector salian como tres opciones distintas que hacen lo mismo.
+ *
+ * Se queda solo la forma corta (`Newspaper`): es la que guardan los bloques y la
+ * que `DynamicIcon` resuelve.
+ */
+const LUCIDE_ICON_NAMES: string[] = Object.keys(LucideIcons).filter(
+  (name) =>
+    /^[A-Z]/.test(name) &&
+    !name.endsWith("Icon") &&
+    !name.startsWith("Lucide"),
+);
 
 const POPULAR_ICONS = [
   "Heart",
@@ -61,18 +89,13 @@ const POPULAR_ICONS = [
   "Settings",
   "Activity",
   "Stethoscope",
-  // Redes sociales: los nombres llevan el prefijo `Fa` porque vienen de
-  // `react-icons/fa`. Los alias sin prefijo (`Instagram`, `Facebook`) NO
-  // existen en el set que carga `DynamicIcon`, asi que elegirlos dejaba el
-  // enlace sin icono. Se listan con el nombre real para que el selector
-  // ofrezca solo lo que se puede dibujar.
-  "FaInstagram",
-  "FaFacebookF",
-  "FaLinkedin",
-  "FaXTwitter",
-  "FaYoutube",
-  "FaTiktok",
-  "FaWhatsapp",
+  /**
+   * Redes sociales: se derivan de `BUSINESS_ICONS`, que es la lista que la web
+   * sabe pintar. Estaban escritos a mano y uno de ellos (`FaXTwitter`) no existe
+   * en esa lista: elegirlo dejaba el enlace sin icono en la pagina publicada,
+   * aunque el editor lo mostrara.
+   */
+  ...BUSINESS_ICONS.map((icon) => icon.name),
 ];
 
 const PRESET_COLORS = [
@@ -105,6 +128,138 @@ export function PropertiesPanel({
   const [activeIconProp, setActiveIconProp] = useState<{
     propName: string;
   } | null>(null);
+
+  /**
+   * Texto del buscador del selector de icono.
+   *
+   * Se limpia al elegir y al abrir otro campo: si se quedara, el siguiente
+   * campo de icono abriria ya filtrado por lo que se busco antes.
+   */
+  const [iconSearch, setIconSearch] = useState("");
+
+  /**
+   * Los iconos que se muestran en el selector, ya filtrados.
+   *
+   * Sin busqueda son los `POPULAR_ICONS` (una rejilla corta y reconocible).
+   * Con busqueda se recorre **todo** lo que `ALL_ICONS` conoce, para que el
+   * cliente pueda llegar a un icono que no esta en la lista corta.
+   */
+  const iconOptions = useMemo(() => {
+    const query = iconSearch
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    if (!query) return POPULAR_ICONS;
+
+    /**
+     * La busqueda mira tres cosas: el nombre tecnico, la etiqueta en espanol y
+     * las palabras clave. Buscar solo el nombre hacia que "cara" no encontrara
+     * Facebook y "wsp" no encontrara WhatsApp.
+     */
+    const labelFor = (name: string) =>
+      BUSINESS_ICONS.find((icon) => icon.name === name)?.label ?? name;
+
+    const keywordsFor = (name: string) =>
+      BUSINESS_ICONS.find((icon) => icon.name === name)?.keywords ?? [];
+
+    /**
+     * Traducciones de los iconos de interfaz que mas se buscan en espanol.
+     *
+     * Lucide solo tiene nombres en ingles: "flecha" no encontraba `ArrowRight`
+     * porque la palabra no aparece en ningun sitio. Es una lista corta y de los
+     * casos frecuentes, no un diccionario.
+     */
+    const SPANISH: Record<string, string[]> = {
+      ArrowRight: ["flecha", "derecha", "siguiente"],
+      ArrowLeft: ["flecha", "izquierda", "atras"],
+      ArrowUp: ["flecha", "arriba"],
+      ArrowDown: ["flecha", "abajo"],
+      Phone: ["telefono", "llamar", "contacto"],
+      Mail: ["correo", "email", "sobre", "contacto"],
+      MapPin: ["ubicacion", "mapa", "direccion"],
+      Calendar: ["calendario", "fecha", "agenda", "cita"],
+      Clock: ["reloj", "hora", "horario"],
+      Check: ["check", "tache", "listo", "ok", "correcto"],
+      X: ["cerrar", "equis", "cancelar"],
+      Heart: ["corazon", "favorito", "me gusta"],
+      Star: ["estrella", "favorito", "valoracion"],
+      User: ["usuario", "persona", "perfil"],
+      Users: ["usuarios", "personas", "equipo"],
+      Search: ["buscar", "lupa"],
+      Settings: ["ajustes", "configuracion", "engranaje"],
+      Shield: ["escudo", "seguridad", "proteccion"],
+      Stethoscope: ["estetoscopio", "medico", "salud"],
+      Activity: ["actividad", "pulso", "salud"],
+      Scissors: ["tijera", "corte", "barberia"],
+      Sparkles: ["brillo", "destellos", "estetica"],
+      Smile: ["sonrisa", "feliz", "cara"],
+      Building: ["edificio", "empresa", "negocio"],
+      Home: ["inicio", "casa"],
+      MessageCircle: ["mensaje", "chat", "conversacion"],
+      Award: ["premio", "medalla", "logro"],
+      GraduationCap: ["estudios", "titulo", "educacion"],
+    };
+
+    const lucideKeywords = (name: string) => SPANISH[name] ?? [];
+
+    /**
+     * Se buscan los DOS grupos.
+     *
+     * Antes solo recorria `LUCIDE_ICON_NAMES`, asi que escribir "whatsapp"
+     * devolvia **cero resultados** aunque el icono exista y este en la rejilla: es
+     * una marca, y las marcas no son de Lucide.
+     */
+    const matches = (texts: string[]) =>
+      texts
+        .map((text) =>
+          text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+        )
+        .some((text) => text.includes(query));
+
+    /** Cuantas coincidencias empiezan por el texto buscado. */
+    const prefixScore = (texts: string[]) =>
+      texts.filter((text) =>
+        text
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .startsWith(query),
+      ).length;
+
+    /**
+     * Prioridad de los resultados.
+     *
+     * Buscar por subcadena es comodo pero llena la lista de ruido: "wsp"
+     * encontraba `Newspaper` (por la `wsp` de "ne**wsp**aper") y "cara" encontraba
+     * `Caravan`. Se sigue mostrando todo (a veces el ruido es util), pero **arriba
+     * queda lo que empieza por lo buscado**, que es casi siempre lo que se queria.
+     *
+     * Las marcas van antes que Lucide porque es lo que mas se busca en una ficha
+     * de negocio.
+     */
+    const scored: { name: string; score: number }[] = [];
+
+    BUSINESS_ICONS.forEach((icon, index) => {
+      const texts = [icon.name, icon.label, ...(icon.keywords ?? [])];
+      if (!matches(texts)) return;
+
+      // 100 de base: cualquier marca va antes que un icono de interfaz.
+      scored.push({ name: icon.name, score: 1000 - index * 10 - (prefixScore(texts) ? 0 : 5) });
+    });
+
+    LUCIDE_ICON_NAMES.forEach((name) => {
+      if (!ALL_ICONS[name]) return;
+
+      const texts = [name, labelFor(name), ...keywordsFor(name), ...lucideKeywords(name)];
+      if (!matches(texts)) return;
+
+      scored.push({ name, score: prefixScore(texts) ? 100 : 10 });
+    });
+
+    return scored.sort((a, b) => b.score - a.score).map((entry) => entry.name);
+  }, [iconSearch]);
   /**
    * Campo de imagen con el selector abierto (`locationKey`).
    *
@@ -445,9 +600,13 @@ export function PropertiesPanel({
           </label>
           <button
             type="button"
-            onClick={() =>
-              setActiveIconProp(isOpen ? null : { propName: locationKey })
-            }
+            data-icon-picker-toggle="true"
+            onClick={() => {
+              // Se limpia al ABRIR otro campo: si no, el selector se abre ya
+              // filtrado con lo que se busco en el anterior.
+              if (!isOpen) setIconSearch("");
+              setActiveIconProp(isOpen ? null : { propName: locationKey });
+            }}
             className="flex items-center justify-between gap-2 rounded-lg border border-stone-800 bg-stone-950 px-2.5 py-1.5 text-xs text-stone-200 hover:border-stone-700"
           >
             <div className="flex items-center gap-2">
@@ -458,29 +617,62 @@ export function PropertiesPanel({
           </button>
 
           {isOpen && (
-            <div className="absolute top-full left-0 z-30 mt-1 w-full rounded-xl border border-stone-800 bg-stone-900 p-2 shadow-xl grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
-              {POPULAR_ICONS.map((iconName) => {
-                const ItemIcon = (ALL_ICONS as any)[iconName];
-                if (!ItemIcon) return null;
-                return (
-                  <button
-                    key={iconName}
-                    type="button"
-                    onClick={() => {
-                      onChange(iconName);
-                      setActiveIconProp(null);
-                    }}
-                    className={`flex flex-col items-center justify-center p-2 rounded-lg hover:bg-stone-800 transition ${
-                      value === iconName
-                        ? "bg-amber-400/10 text-amber-300 border border-amber-400/30"
-                        : "text-stone-400"
-                    }`}
-                    title={iconName}
-                  >
-                    <ItemIcon className="h-4 w-4" />
-                  </button>
-                );
-              })}
+            <div className="absolute top-full left-0 z-30 mt-1 w-full rounded-xl border border-stone-800 bg-stone-900 p-2 shadow-xl">
+              {/*
+                Buscador.
+
+                La rejilla muestra ~20 iconos; sin buscador, cambiar el icono de
+                un enlace social obliga a recorrer una lista fija que no incluye
+                lo que el cliente quiere. Busca por nombre, etiqueta y palabras
+                clave (ver `matchesIconQuery`).
+              */}
+              <input
+                type="text"
+                data-icon-picker-search="true"
+                autoFocus
+                placeholder="Buscar ícono..."
+                value={iconSearch}
+                onChange={(e) => setIconSearch(e.target.value)}
+                className="mb-2 w-full rounded-lg border border-stone-800 bg-stone-950 px-2 py-1 text-[11px] text-stone-200 outline-none focus:border-amber-400/50"
+              />
+
+              <div className="grid max-h-44 grid-cols-4 gap-1.5 overflow-y-auto">
+                {iconOptions.map((iconName: string) => {
+                  const ItemIcon = (ALL_ICONS as any)[iconName];
+                  if (!ItemIcon) return null;
+
+                  const label =
+                    BUSINESS_ICONS.find((icon) => icon.name === iconName)
+                      ?.label ?? iconName;
+
+                  return (
+                    <button
+                      key={iconName}
+                      type="button"
+                      data-icon-option={iconName}
+                      title={label}
+                      onClick={() => {
+                        onChange(iconName);
+                        setActiveIconProp(null);
+                        setIconSearch("");
+                      }}
+                      className={`flex flex-col items-center justify-center p-2 rounded-lg hover:bg-stone-800 transition ${
+                        value === iconName
+                          ? "bg-amber-400/10 text-amber-300 border border-amber-400/30"
+                          : "text-stone-400"
+                      }`}
+                    >
+                      <ItemIcon className="h-4 w-4" />
+                    </button>
+                  );
+                })}
+              </div>
+
+              {iconOptions.length === 0 ? (
+                <p className="px-2 py-3 text-center text-[10px] text-stone-500">
+                  Ningún ícono coincide.
+                </p>
+              ) : null}
             </div>
           )}
         </div>

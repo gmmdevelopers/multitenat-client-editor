@@ -955,7 +955,6 @@ export default function PageBuilderPage() {
         {/* Canvas Central */}
         <Canvas
           blocks={blocks}
-          pageId={pageId}
           selectedBlockId={selectedBlockId}
           viewportMode={viewportMode}
           zoom={zoom}
