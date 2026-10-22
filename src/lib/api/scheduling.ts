@@ -78,7 +78,14 @@ export interface BookAppointmentPayload {
     firstName: string;
     lastName: string;
     email?: string;
-    phone?: string;
+    /**
+     * **Obligatorio.**
+     *
+     * Sin telefono el negocio no puede avisar de un cambio ni de un atraso, y
+     * la reserva sin contacto real es la forma tipica de reservar por error o
+     * por broma. El backend lo exige: omitirlo da **400**.
+     */
+    phone: string;
   };
 }
 

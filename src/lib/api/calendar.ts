@@ -11,7 +11,6 @@ export interface CalendarAppointment {
   boxName: string;
   patientId: string;
   patientName: string;
-  patientPhone: string | null;
 }
 
 export interface CalendarProfessional {
@@ -46,7 +45,11 @@ export async function getCalendar(params: {
 export interface CreateAppointmentRequest {
   patientId: string;
   professionalId: string;
-  boxId: string;
+  /**
+   * Opcional: sin box, el backend resuelve el primer consultorio activo. El
+   * box es una asignacion operativa, no un requisito para que exista la cita.
+   */
+  boxId?: string;
   /** Servicio: de aqui sale la duracion de la cita. */
   serviceId?: string;
   startsAt: string;
@@ -115,15 +118,38 @@ export interface AppointmentDetail {
     serviceId: string | null;
     patientId: string;
     professionalId: string;
-    boxId: string;
+    boxId: string | null;
+    /**
+     * Quien creo la cita.
+     *
+     * `createdByName` es el nombre **congelado** al crear: si esa persona
+     * cambia de nombre o deja el negocio, la cita sigue diciendo quien la
+     * agendo. `null` en ambos = la creo el paciente.
+     */
+    createdById?: string | null;
+    createdByName?: string | null;
+    /** `staff` | `public_web` | `patient_app`. */
+    createdSource?: string | null;
   };
   labels: {
     patientName: string;
     professionalName: string;
-    boxName: string;
+    boxName: string | null;
   };
   service: { id: string; name: string; durationInMinutes: number } | null;
   price: number | null;
+}
+
+/**
+ * Contacto del paciente de una cita.
+ *
+ * Va en una peticion aparte y no dentro del calendario: son datos personales y
+ * no hacen falta para pintar la rejilla. El calendario se carga cada vez que se
+ * cambia de semana, asi que incrustarlos ahi los haria viajar de mas.
+ */
+export interface AppointmentContact {
+  email: string | null;
+  phone: string | null;
 }
 
 /** Detalle de una cita, con nombres y servicio ya resueltos. */
@@ -132,6 +158,17 @@ export async function getAppointmentDetail(
 ): Promise<AppointmentDetail> {
   const { data } = await api.get<AppointmentDetail>(
     `/appointments/${appointmentId}`,
+  );
+
+  return data;
+}
+
+/** Contacto del paciente de una cita. Solo lo pide el detalle. */
+export async function getAppointmentContact(
+  appointmentId: string,
+): Promise<AppointmentContact> {
+  const { data } = await api.get<AppointmentContact>(
+    `/appointments/${appointmentId}/contact`,
   );
 
   return data;

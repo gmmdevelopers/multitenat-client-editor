@@ -7,27 +7,34 @@ import {
   Check,
   Clock,
   DollarSign,
+  Mail,
   MapPin,
+  MessageCircle,
   Phone,
   Trash2,
+  UserCheck,
   UserRound,
   X,
   XCircle,
 } from "lucide-react";
 
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 import { getErrorMessage } from "@/lib/api/errors";
 import {
   deleteAppointment,
+  getAppointmentContact,
   getAppointmentDetail,
   rescheduleAppointment,
   updateAppointmentStatus,
   STATUS_LABELS,
+  type AppointmentContact,
   type AppointmentDetail,
   type CalendarAppointment,
   type ManualStatus,
 } from "@/lib/api/calendar";
 import { formatTime } from "@/lib/calendar-dates";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 /** Estados desde los que ya no se puede cambiar nada. */
 const FINAL_STATUSES = ["cancelled", "completed", "no_show"];
@@ -70,7 +77,19 @@ export function AppointmentDetailModal({
 }: AppointmentDetailModalProps) {
   const toast = useToast();
 
+  /**
+   * El nombre del negocio, para el saludo de WhatsApp.
+   *
+   * Sale del contexto de sesion y no de una prop: el modal se usa desde la
+   * agenda, que ya tiene el tenant cargado, y pasarlo como prop obligaria a
+   * cada pantalla que lo abra a acordarse de mandarlo.
+   */
+  const { tenant } = useAuth();
+
   const [detail, setDetail] = useState<AppointmentDetail | null>(null);
+  // El contacto se pide aparte: son datos personales y no viajan con el
+  // calendario, que se recarga entero cada vez que se cambia de semana.
+  const [contact, setContact] = useState<AppointmentContact | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
@@ -120,6 +139,17 @@ export function AppointmentDetailModal({
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
+      });
+
+    // El contacto se pide en paralelo y no bloquea el detalle: si falla, el
+    // modal sigue sirviendo para todo lo demas. Solo el recepcionista puede
+    // verlo; para un profesional el 403 es esperado y se trata como "sin datos".
+    void getAppointmentContact(appointment.id)
+      .then((data) => {
+        if (!cancelled) setContact(data);
+      })
+      .catch(() => {
+        if (!cancelled) setContact(null);
       });
 
     return () => {
@@ -182,6 +212,56 @@ export function AppointmentDetailModal({
 
   const status = detail?.appointment.status ?? appointment.status;
   const isFinal = FINAL_STATUSES.includes(status);
+
+  /**
+   * «Creada por» en una linea, o `null` si no hay dato.
+   *
+   * ## Por que no es solo el nombre
+   *
+   * La cita puede haberla creado el paciente, y entonces no hay nombre que
+   * ensenar. Decir solo «Paciente» deja la duda de si la agendo el mismo por la
+   * web o por la app: se dice el **canal**, que es el dato util.
+   *
+   * Si las citas antiguas no tienen `createdSource`, se devuelve `null` y la fila
+   * no se pinta. Es mejor no mostrar nada que mostrar «desconocido» en cada cita
+   * del historico.
+   */
+  function createdByLabel(
+    current: typeof detail,
+  ): string | null {
+    const name = current?.appointment.createdByName?.trim();
+    const source = current?.appointment.createdSource;
+
+    if (name) return name;
+
+    if (source === "public_web") return "El paciente · desde la web";
+    if (source === "patient_app") return "El paciente · desde la app";
+
+    // `staff` sin nombre: cita antigua, anterior a este campo.
+    return null;
+  }
+
+  /**
+   * Enlace de WhatsApp, con un mensaje ya escrito.
+   *
+   * `null` si el telefono no se puede normalizar, y entonces el boton no se
+   * pinta: es preferible a ofrecer uno que abra WhatsApp con un error.
+   *
+   * El texto lleva el **nombre y la hora** porque es lo que se comunica en el
+   * 90% de los avisos ("te esperamos a las 15:30"). Recepcion lo puede editar
+   * antes de enviar; el borrador solo le ahorra escribirlo entero cada vez.
+   */
+  const appointmentTime = formatTime(
+    new Date(detail?.appointment.startsAt ?? appointment.startsAt),
+  );
+
+  const patientFirstName = (
+    detail?.labels.patientName ?? appointment.patientName
+  ).split(" ")[0];
+  const whatsappLink = buildWhatsAppLink(
+    contact?.phone ?? null,
+    `Hola ${patientFirstName}, te escribimos de ${tenant?.name ?? "el negocio"}. Te esperamos a las ${appointmentTime}.`,
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -269,17 +349,81 @@ export function AppointmentDetailModal({
                   value={`$${detail.price.toLocaleString("es-CL")}`}
                 />
               ) : null}
+
+              {/*
+                Quien creo la cita.
+
+                ## Por que se muestra esto
+
+                Cuando dos personas atienden la agenda (la duena por la manana,
+                la recepcionista por la tarde), «¿quien agendo esto?» es la
+                primera pregunta ante un error: una cita duplicada, un paciente
+                que dice que no reservo, una hora cambiada.
+
+                ## Los tres casos
+
+                `staff` muestra el nombre; los otros dos dicen el canal. Un
+                paciente que llama por telefono no tiene por que saber que su
+                reserva "vino de la web": se le dice de donde salio, sin
+                tecnicismos.
+              */}
+              {createdByLabel(detail) ? (
+                <Row
+                  icon={UserCheck}
+                  label="Creada por"
+                  value={createdByLabel(detail)!}
+                />
+              ) : null}
             </div>
 
-            {/* Contacto: el recepcionista necesita llamar al paciente cuando
-                avisa que no llega. El enlace abre la app de telefono del sistema. */}
-            {appointment.patientPhone ? (
+            {/* Contacto: el recepcionista necesita llamar o escribir al paciente
+                cuando avisa que no llega. Cada enlace abre la app del sistema.
+                Si no hay sesion con permiso, el bloque no se pinta. */}
+            {contact?.phone ? (
               <a
-                href={`tel:${appointment.patientPhone}`}
+                href={`tel:${contact.phone}`}
                 className="flex items-center justify-center gap-1.5 rounded-lg border border-stone-700 px-3 py-2 text-[11px] font-semibold text-stone-300 transition hover:bg-stone-800 hover:text-white"
               >
                 <Phone className="h-3.5 w-3.5" />
-                {appointment.patientPhone}
+                {contact.phone}
+              </a>
+            ) : null}
+
+            {contact?.email ? (
+              <a
+                href={`mailto:${contact.email}`}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-stone-700 px-3 py-2 text-[11px] font-semibold text-stone-300 transition hover:bg-stone-800 hover:text-white"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {contact.email}
+              </a>
+            ) : null}
+
+            {/*
+              WhatsApp: el canal que recepcion usa de verdad para avisar.
+
+              ## Por que aparece o no
+
+              Solo si el telefono se puede convertir a un numero valido
+              (`buildWhatsAppLink` devuelve `null` si no). Es preferible no
+              mostrar el boton a mostrar uno que abra WhatsApp con un error.
+
+              ## Por que va con mensaje pre-escrito
+
+              Un enlace vacio obliga a recepcion a escribir el saludo cada vez.
+              El texto incluye el nombre y la hora de la cita, que es justo el
+              dato que se esta comunicando ("te esperamos a las 15:30").
+            */}
+            {whatsappLink ? (
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-whatsapp-link="true"
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-green-700/60 bg-green-600/10 px-3 py-2 text-[11px] font-semibold text-green-400 transition hover:bg-green-600/20 hover:text-green-300"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Escribir por WhatsApp
               </a>
             ) : null}
 

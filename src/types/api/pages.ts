@@ -32,6 +32,8 @@ export interface UpdatePageRequest {
   title?: string;
   seoTitle?: string;
   seoDescripcion?: string;
+  /** Etiquetas del cliente, una por elemento (maximo 10 en el backend). */
+  seoTags?: string[];
   blocks?: BlockInstance[];
 }
 
@@ -60,6 +62,13 @@ export interface GetPageForEditorResponse {
   publishedAt: string | null;
   seoTitle: string;
   seoDescripcion: string;
+  /**
+   * Etiquetas del cliente (`<meta name="keywords">`).
+   *
+   * Opcional en el tipo porque las paginas creadas antes de añadir la columna
+   * pueden llegar sin el campo desde una respuesta cacheada.
+   */
+  seoTags?: string[];
   updatedAt: string;
   hasUnpublishedChanges: boolean;
   /**

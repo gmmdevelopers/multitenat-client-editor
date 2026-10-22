@@ -1,26 +1,166 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Tokens de la marca, GENERADOS.
+ *
+ * `tokens.generated.css` sale de `@multitenant/tokens` (el paquete compartido con
+ * el dashboard, la landing y la app del paciente):
+ *
+ *   node --experimental-strip-types scripts/generate-tokens.mjs
+ *
+ * **No editar ese archivo a mano**: se sobreescribe. Para cambiar un color, se
+ * cambia en el paquete y se regenera.
+ *
+ * Trae los DOS modos: claro en `:root` y oscuro en `.dark`.
+ */
+@import "./tokens.generated.css";
 
+/*
+ * El modo oscuro se activa con la CLASE `.dark`, no con
+ * `@media (prefers-color-scheme)`.
+ *
+ * Tailwind v4 usa `prefers-color-scheme` por defecto para `dark:`. Con esta
+ * linea se le dice que use la clase, que es la que pone el conmutador en el
+ * `<html>`: asi el usuario elige, en vez de seguir al sistema.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Puente a Tailwind.
+ *
+ * `@theme inline` expone las variables como utilidades. Y ademas **remapea las
+ * escalas que ya usan los componentes**: asi los ~1400 usos de `stone-*`,
+ * `gray-*`, `amber-*`... pasan a los tokens de la marca sin tocar un componente.
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-pressed: var(--surface-pressed);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-muted: var(--muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-on-accent: var(--on-accent);
+  --color-on-surface: var(--on-surface);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+
+  /* Colores de CATEGORIA: los planes del negocio. */
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-premium: var(--premium);
+  --color-premium-soft: var(--premium-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /*
+   * --- Remapeo de las escalas que ya usan los componentes ---
+   *
+   * Los componentes usan escalas de Tailwind **fijas** en ~1400 sitios de 61
+   * archivos. Migrarlos uno a uno seria enorme y **facil de dejar a medias**.
+   *
+   * Remapeando las escalas ENTERAS, todos los usos pasan a la marca de una vez.
+   * El nombre sigue siendo `stone-900`, pero su valor ya es el token.
+   *
+   * ## OJO: esto es un PUENTE, no el destino
+   *
+   * Un nombre de TONO (`stone-950`) no dice el PAPEL (`fondo`, `superficie`), y
+   * por eso NO puede responder al modo: `bg-stone-950` es el mismo color en claro
+   * y en oscuro.
+   *
+   * Las fases siguientes migran los componentes a los nombres semanticos
+   * (`bg-background`, `bg-surface`, `text-muted`...), que si cambian con el tema.
+   * Cuando eso termine, este bloque se puede borrar.
+   *
+   * ## QUE YA SE MIGRO (y que NO debe migrarse)
+   *
+   * | Bloque | Tokens | Por que |
+   * |---|---|---|
+   * | `app/site/[slug]/admin/` | **Si** | Es la herramienta interna de Multitenant. |
+   * | `components/editor/`, `app/publico/`, `app/preview/` | **NO** | Es el **canvas del cliente**. |
+   *
+   * **El canvas NO lleva tokens, y es a proposito.** Ahi se ve y se diseña la
+   * web **del negocio**, que tiene **sus propios colores** (los que el cliente
+   * elige en su paleta). Meterle los de Multitenant mezclaria los dos mundos que
+   * este paquete existe para separar: la marca de la plataforma y la identidad
+   * de cada cliente.
+   *
+   * Por eso `PageRenderer` usa `bg-white` **fijo**: no es un color olvidado, es
+   * el lienzo de la web del cliente. Si el panel esta en oscuro, el lienzo sigue
+   * siendo claro, porque representa la web que vera el visitante.
+   *
+   * `stone` es la escala principal del panel (809 usos); `gray` y `zinc` se
+   * unifican con ella.
+   */
+  --color-stone-950: var(--surface-pressed);
+  --color-stone-900: var(--surface);
+  --color-stone-800: var(--line);
+  --color-stone-700: var(--line-strong);
+  --color-stone-600: var(--muted);
+  --color-stone-500: var(--muted);
+  --color-stone-400: var(--muted);
+  --color-stone-300: var(--on-surface);
+  --color-stone-200: var(--on-surface);
+  --color-stone-100: var(--on-surface);
+
+  --color-gray-950: var(--surface-pressed);
+  --color-gray-900: var(--surface);
+  --color-gray-800: var(--line);
+  --color-gray-700: var(--line-strong);
+  --color-gray-600: var(--muted);
+  --color-gray-500: var(--muted);
+  --color-gray-400: var(--muted);
+  --color-gray-300: var(--on-surface);
+  --color-gray-200: var(--on-surface);
+
+  /* El acento: ambar de la marca, en los dos modos. */
+  --color-amber-300: var(--accent-strong);
+  --color-amber-400: var(--accent);
+  --color-amber-500: var(--accent);
+  --color-amber-950: var(--accent-soft);
+
+  /* Estados. */
+  --color-emerald-300: var(--success);
+  --color-emerald-400: var(--success);
+  --color-emerald-500: var(--success);
+  --color-emerald-950: var(--success-soft);
+  --color-red-300: var(--danger);
+  --color-red-400: var(--danger);
+  --color-red-500: var(--danger);
+  --color-red-950: var(--danger-soft);
+
+  /* Planes. */
+  --color-blue-300: var(--info);
+  --color-blue-400: var(--info);
+  --color-blue-950: var(--info-soft);
+  --color-purple-300: var(--premium);
+  --color-purple-400: var(--premium);
+  --color-purple-950: var(--premium-soft);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  /* Evita el salto horizontal cuando aparece la barra de scroll. */
+  scrollbar-gutter: stable;
+}
+
+/*
+ * Foco visible consistente. Se define aqui para que ningun componente pueda
+ * olvidarlo y dejar la navegacion por teclado sin indicador.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

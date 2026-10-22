@@ -264,7 +264,7 @@ export default function ProfessionalSchedulePage() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-xl border-red-500/40 bg-red-500/10 p-6 text-sm text-red-400">
+        <div className="max-w-md rounded-xl border-danger/40 bg-danger/10 p-6 text-sm text-danger">
           {error}
         </div>
       </div>
@@ -274,7 +274,7 @@ export default function ProfessionalSchedulePage() {
   if (professionals === null) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="animate-pulse text-sm text-stone-400">
+        <span className="animate-pulse text-sm text-muted">
           Cargando profesionales...
         </span>
       </div>
@@ -287,17 +287,17 @@ export default function ProfessionalSchedulePage() {
     return (
       <div className="mx-auto max-w-4xl px-6 py-10">
         <header className="mb-8">
-          <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-            <Users className="h-5 w-5 text-amber-300" />
+          <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
+            <Users className="h-5 w-5 text-accent-strong" />
             Horario por profesional
           </h1>
         </header>
-        <div className="rounded-2xl border border-stone-800 bg-stone-950/40 p-10 text-center">
-          <UserRound className="mx-auto mb-3 h-6 w-6 text-stone-600" />
-          <p className="text-sm text-stone-400">
+        <div className="rounded-2xl border border-line bg-background/40 p-10 text-center">
+          <UserRound className="mx-auto mb-3 h-6 w-6 text-text-subtle" />
+          <p className="text-sm text-muted">
             Todavía no tienes profesionales activos.
           </p>
-          <p className="mt-1 text-[11px] text-stone-500">
+          <p className="mt-1 text-[11px] text-text-subtle">
             Créalos en la sección Profesionales y vuelve aquí para ajustar sus
             horarios.
           </p>
@@ -310,11 +310,11 @@ export default function ProfessionalSchedulePage() {
     <div className="mx-auto max-w-4xl px-6 py-10">
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-            <Users className="h-5 w-5 text-amber-300" />
+          <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
+            <Users className="h-5 w-5 text-accent-strong" />
             Horario por profesional
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-stone-400">
+          <p className="mt-1 max-w-xl text-sm text-muted">
             Por defecto todos siguen el horario del negocio. Aquí puedes darle a
             alguien un horario distinto.
           </p>
@@ -325,7 +325,7 @@ export default function ProfessionalSchedulePage() {
           data-save-professional-hours="true"
           onClick={() => void handleSave()}
           disabled={isSaving || !hasChanges || !drafts}
-          className="flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Check className="h-3.5 w-3.5" />
           {isSaving ? "Guardando..." : "Guardar horario"}
@@ -334,14 +334,14 @@ export default function ProfessionalSchedulePage() {
 
       {/* Selector de profesional */}
       <label className="mb-5 block">
-        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
           Profesional
         </span>
         <select
           data-professional-select="true"
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
-          className="w-full max-w-sm rounded-lg border-stone-800 bg-stone-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+          className="w-full max-w-sm rounded-lg border-line bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
         >
           {professionals.map((professional) => (
             <option key={professional.id} value={professional.id}>
@@ -353,7 +353,7 @@ export default function ProfessionalSchedulePage() {
 
       {isLoadingDays || !drafts ? (
         <div className="flex justify-center py-16">
-          <span className="animate-pulse text-sm text-stone-400">
+          <span className="animate-pulse text-sm text-muted">
             Cargando horario...
           </span>
         </div>
@@ -361,11 +361,11 @@ export default function ProfessionalSchedulePage() {
         <>
           {/* Resumen del estado: cuantas excepciones tiene. Es el dato que
               explica de un vistazo por que su agenda difiere de la del negocio. */}
-          <div className="mb-4 rounded-xl border border-stone-800 bg-stone-950/60 px-4 py-3">
-            <p className="text-[11px] text-stone-400">
+          <div className="mb-4 rounded-xl border border-line bg-background/60 px-4 py-3">
+            <p className="text-[11px] text-muted">
               {customCount === 0 ? (
                 <>
-                  <strong className="font-semibold text-white">
+                  <strong className="font-semibold text-foreground">
                     {selected?.firstName} sigue el horario del negocio
                   </strong>{" "}
                   todos los días. Si cambias el horario de atención, su agenda
@@ -373,7 +373,7 @@ export default function ProfessionalSchedulePage() {
                 </>
               ) : (
                 <>
-                  <strong className="font-semibold text-white">
+                  <strong className="font-semibold text-foreground">
                     {customCount}{" "}
                     {customCount === 1 ? "día con horario propio" : "días con horario propio"}
                   </strong>
@@ -383,7 +383,7 @@ export default function ProfessionalSchedulePage() {
             </p>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-stone-800">
+          <div className="overflow-hidden rounded-2xl border border-line">
             {drafts.map((day, index) => {
               const inherited = businessDays.find(
                 (d) => d.dayOfWeek === day.dayOfWeek,
@@ -395,13 +395,13 @@ export default function ProfessionalSchedulePage() {
                   data-prof-day={day.dayOfWeek}
                   data-is-custom={day.isCustom ? "true" : "false"}
                   className={`px-4 py-3 ${
-                    index > 0 ? "border-t border-stone-800" : ""
-                  } ${day.isCustom ? "" : "bg-stone-950/40"}`}
+                    index > 0 ? "border-t border-line" : ""
+                  } ${day.isCustom ? "" : "bg-background/40"}`}
                 >
                   <div className="flex flex-wrap items-center gap-3">
                     <span
                       className={`w-32 shrink-0 text-sm font-semibold ${
-                        day.isCustom ? "text-white" : "text-stone-500"
+                        day.isCustom ? "text-foreground" : "text-text-subtle"
                       }`}
                     >
                       {DAY_NAMES[day.dayOfWeek]}
@@ -420,16 +420,16 @@ export default function ProfessionalSchedulePage() {
                                 isClosed: !e.target.checked,
                               })
                             }
-                            className="h-4 w-4 rounded border-stone-700 bg-stone-800"
+                            className="h-4 w-4 rounded border-line-strong bg-surface-raised"
                           />
-                          <span className="text-xs text-stone-400">
+                          <span className="text-xs text-muted">
                             {day.isClosed ? "Cerrado" : "Abierto"}
                           </span>
                         </label>
 
                         {!day.isClosed ? (
                           <div className="flex flex-wrap items-center gap-2">
-                            <Clock className="h-3.5 w-3.5 text-stone-500" />
+                            <Clock className="h-3.5 w-3.5 text-text-subtle" />
                             <input
                               type="time"
                               data-prof-opens={day.dayOfWeek}
@@ -439,9 +439,9 @@ export default function ProfessionalSchedulePage() {
                                   opensAt: e.target.value,
                                 })
                               }
-                              className="rounded-lg border border-stone-700 bg-stone-950 px-2.5 py-1.5 text-sm text-white outline-none focus:border-amber-400"
+                              className="rounded-lg border border-line-strong bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-accent"
                             />
-                            <span className="text-xs text-stone-500">a</span>
+                            <span className="text-xs text-text-subtle">a</span>
                             <input
                               type="time"
                               data-prof-closes={day.dayOfWeek}
@@ -451,7 +451,7 @@ export default function ProfessionalSchedulePage() {
                                   closesAt: e.target.value,
                                 })
                               }
-                              className="rounded-lg border border-stone-700 bg-stone-950 px-2.5 py-1.5 text-sm text-white outline-none focus:border-amber-400"
+                              className="rounded-lg border border-line-strong bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-accent"
                             />
 
                             {/* Descanso: vive en el horario del profesional y no
@@ -467,10 +467,10 @@ export default function ProfessionalSchedulePage() {
                                     hasBreak: e.target.checked,
                                   })
                                 }
-                                className="h-3.5 w-3.5 rounded border-stone-700 bg-stone-800"
+                                className="h-3.5 w-3.5 rounded border-line-strong bg-surface-raised"
                               />
-                              <Coffee className="h-3.5 w-3.5 text-stone-500" />
-                              <span className="text-[11px] text-stone-400">
+                              <Coffee className="h-3.5 w-3.5 text-text-subtle" />
+                              <span className="text-[11px] text-muted">
                                 Descanso
                               </span>
                             </label>
@@ -486,9 +486,9 @@ export default function ProfessionalSchedulePage() {
                                       breakStartsAt: e.target.value,
                                     })
                                   }
-                                  className="rounded-lg border border-stone-700 bg-stone-950 px-2.5 py-1.5 text-sm text-white outline-none focus:border-amber-400"
+                                  className="rounded-lg border border-line-strong bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-accent"
                                 />
-                                <span className="text-xs text-stone-500">a</span>
+                                <span className="text-xs text-text-subtle">a</span>
                                 <input
                                   type="time"
                                   data-prof-break-end={day.dayOfWeek}
@@ -498,7 +498,7 @@ export default function ProfessionalSchedulePage() {
                                       breakEndsAt: e.target.value,
                                     })
                                   }
-                                  className="rounded-lg border border-stone-700 bg-stone-950 px-2.5 py-1.5 text-sm text-white outline-none focus:border-amber-400"
+                                  className="rounded-lg border border-line-strong bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-accent"
                                 />
                               </span>
                             ) : null}
@@ -512,7 +512,7 @@ export default function ProfessionalSchedulePage() {
                             updateDay(day.dayOfWeek, { isCustom: false })
                           }
                           title="Volver a heredar el horario del negocio"
-                          className="ml-auto rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-stone-400 transition hover:bg-stone-800 hover:text-white"
+                          className="ml-auto rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-muted transition hover:bg-surface-raised hover:text-foreground"
                         >
                           Heredar del negocio
                         </button>
@@ -521,13 +521,13 @@ export default function ProfessionalSchedulePage() {
                       <>
                         {/* Día heredado: NO editable. Se muestra como referencia
                             y un botón para convertirlo en excepción. */}
-                        <span className="text-xs text-stone-500">
+                        <span className="text-xs text-text-subtle">
                           {inherited?.isClosed || !inherited ? (
                             "Cerrado (como el negocio)"
                           ) : (
                             <>
                               Hereda del negocio:{" "}
-                              <span className="font-mono text-stone-400">
+                              <span className="font-mono text-muted">
                                 {inherited.opensAt} a {inherited.closesAt}
                               </span>
                             </>
@@ -538,7 +538,7 @@ export default function ProfessionalSchedulePage() {
                           type="button"
                           data-prof-customize={day.dayOfWeek}
                           onClick={() => makeCustom(day)}
-                          className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-stone-400 transition hover:bg-stone-800 hover:text-white"
+                          className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-muted transition hover:bg-surface-raised hover:text-foreground"
                         >
                           <ArrowDownToLine className="h-3 w-3" />
                           Horario propio
@@ -553,19 +553,19 @@ export default function ProfessionalSchedulePage() {
 
           <div className="mt-5 flex items-center justify-end">
             {hasChanges ? (
-              <span className="text-[11px] font-semibold text-amber-300">
+              <span className="text-[11px] font-semibold text-accent-strong">
                 Cambios sin guardar
               </span>
             ) : (
-              <span className="text-[11px] text-stone-500">Todo guardado</span>
+              <span className="text-[11px] text-text-subtle">Todo guardado</span>
             )}
           </div>
 
-          <p className="mt-6 text-[11px] leading-relaxed text-stone-500">
-            Un día con horario propio <strong className="text-stone-400">ya no
+          <p className="mt-6 text-[11px] leading-relaxed text-text-subtle">
+            Un día con horario propio <strong className="text-muted">ya no
             sigue al negocio</strong>: si más adelante cambias el horario de
             atención, ese día se queda como está. Para que vuelva a seguirlo,
-            usa <strong className="text-stone-400">Heredar del negocio</strong>.
+            usa <strong className="text-muted">Heredar del negocio</strong>.
           </p>
         </>
       )}

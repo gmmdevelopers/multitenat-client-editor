@@ -23,25 +23,22 @@ import type { NextConfig } from "next";
  * arriba. Fiarse de `.pnpm` daria un falso positivo y romperia el build.
  */
 function resolveTurbopackRoot(): string {
-  try {
-    const realNext = fs.realpathSync(
-      path.join(__dirname, "node_modules", "next"),
-    );
+  /**
+   * En el MONOREPO, la raiz es la carpeta que contiene `packages/`.
+   *
+   * Se decide por la existencia de `packages/design-system`, **no** por donde
+   * este `next`: el editor instala aislado, asi que `next` vive dentro de el y
+   * no dice nada sobre el monorepo. Ese fue el fallo del intento anterior.
+   */
+  const monorepoRoot = path.resolve(__dirname, "..");
 
-    // Resuelto dentro del proyecto (Docker): la raiz es este directorio.
-    if (!path.relative(__dirname, realNext).startsWith("..")) {
-      return __dirname;
-    }
-
-    // Resuelto fuera (monorepo): sube hasta el `node_modules` que lo contiene.
-    const storeIndex = realNext.indexOf(`${path.sep}node_modules${path.sep}`);
-    if (storeIndex !== -1) return realNext.slice(0, storeIndex);
-
-    return path.resolve(__dirname, "..");
-  } catch {
-    // Sin `next` instalado: el ancestro del monorepo es el valor seguro.
-    return path.resolve(__dirname, "..");
+  if (fs.existsSync(path.join(monorepoRoot, "packages", "design-system"))) {
+    return monorepoRoot;
   }
+
+  // Sin `packages/` al lado (Docker): la raiz es el propio directorio, que es
+  // donde se instalaron todas las dependencias.
+  return __dirname;
 }
 
 const nextConfig: NextConfig = {
@@ -50,6 +47,31 @@ const nextConfig: NextConfig = {
   // de build ni las dependencias de desarrollo.
   output: "standalone",
   turbopack: {
+    /**
+     * La raiz es el MONOREPO, no el editor.
+     *
+     * ## Por que
+     *
+     * El editor tiene su propio `pnpm-workspace.yaml` y su lockfile, asi que
+     * pnpm instala **aislado**: `next` vive en `client-editor/node_modules`, no
+     * en la raiz. `resolveTurbopackRoot()` mira donde esta `next`, lo encuentra
+     * dentro, y devolvia **este directorio** como raiz.
+     *
+     * Con esa raiz, `packages/design-system` queda **FUERA** del proyecto, y
+     * Turbopack no lo resuelve:
+     *
+     *     Module not found: Can't resolve '@multitenant/design-system'
+     *
+     * Subiendo la raiz a `multitenant/`, el DS entra en el area que Turbopack
+     * vigila y el `link:` funciona.
+     *
+     * ## Y por que sigue estando bien en Docker
+     *
+     * En la imagen no hay monorepo: el `packages/` no se copia y el DS se
+     * instala como copia desde GitHub (`file:` deja de aplicar). Ahi el ancestro
+     * no contiene `packages/`, y `resolveTurbopackRoot()` devuelve el propio
+     * directorio. Ver esa funcion.
+     */
     root: resolveTurbopackRoot(),
   },
   allowedDevOrigins: [

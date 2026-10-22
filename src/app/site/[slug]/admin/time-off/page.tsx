@@ -280,7 +280,7 @@ export default function TimeOffPage() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-xl border-red-500/40 bg-red-500/10 p-6 text-sm text-red-400">
+        <div className="max-w-md rounded-xl border-danger/40 bg-danger/10 p-6 text-sm text-danger">
           {error}
         </div>
       </div>
@@ -290,7 +290,7 @@ export default function TimeOffPage() {
   if (blocks === null) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="animate-pulse text-sm text-stone-400">
+        <span className="animate-pulse text-sm text-muted">
           Cargando bloqueos...
         </span>
       </div>
@@ -301,11 +301,11 @@ export default function TimeOffPage() {
     <div className="mx-auto max-w-4xl px-6 py-10">
       <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-            <CalendarOff className="h-5 w-5 text-amber-300" />
+          <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
+            <CalendarOff className="h-5 w-5 text-accent-strong" />
             Feriados y vacaciones
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-stone-400">
+          <p className="mt-1 max-w-xl text-sm text-muted">
             Días en que no atiendes: feriados, vacaciones o un cierre puntual.
             En esas fechas tu agenda no ofrece ninguna hora.
           </p>
@@ -319,9 +319,9 @@ export default function TimeOffPage() {
               type="button"
               data-toggle-holidays="true"
               onClick={() => setShowHolidays((current) => !current)}
-              className="flex items-center gap-1.5 rounded-lg border border-stone-700 px-4 py-2 text-xs font-semibold text-stone-300 transition hover:bg-stone-800"
+              className="flex items-center gap-1.5 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-raised"
             >
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+              <Sparkles className="h-3.5 w-3.5 text-accent-strong" />
               Añadir feriados
             </button>
           ) : null}
@@ -330,7 +330,7 @@ export default function TimeOffPage() {
             type="button"
             data-new-timeoff="true"
             onClick={() => setShowForm((current) => !current)}
-            className="flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300"
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong"
           >
             <Plus className="h-3.5 w-3.5" />
             Añadir bloqueo
@@ -345,14 +345,14 @@ export default function TimeOffPage() {
       {showHolidays ? (
         <div
           data-holidays-panel="true"
-          className="mb-6 rounded-2xl border border-stone-800 bg-stone-950/60 p-5"
+          className="mb-6 rounded-2xl border border-line bg-background/60 p-5"
         >
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold text-white">
+              <p className="text-xs font-bold text-foreground">
                 Feriados nacionales
               </p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-stone-400">
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
                 Marca los que quieras bloquear. Los irrenunciables no se pueden
                 trabajar, pero igual decides tú si los añades.
               </p>
@@ -368,7 +368,7 @@ export default function TimeOffPage() {
                     : new Set(pendingHolidays.map((h) => h.date)),
                 )
               }
-              className="text-[11px] font-semibold text-stone-400 transition hover:text-white"
+              className="text-[11px] font-semibold text-muted transition hover:text-foreground"
             >
               {pickedHolidays.size === pendingHolidays.length
                 ? "Quitar selección"
@@ -376,33 +376,33 @@ export default function TimeOffPage() {
             </button>
           </div>
 
-          <ul className="max-h-72 overflow-y-auto rounded-xl border border-stone-800">
+          <ul className="max-h-72 overflow-y-auto rounded-xl border border-line">
             {pendingHolidays.map((holiday, index) => (
               <li
                 key={holiday.date}
-                className={index > 0 ? "border-t border-stone-800" : ""}
+                className={index > 0 ? "border-t border-line" : ""}
               >
-                <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 transition hover:bg-stone-900/60">
+                <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 transition hover:bg-surface/60">
                   <input
                     type="checkbox"
                     data-holiday-date={holiday.date}
                     checked={pickedHolidays.has(holiday.date)}
                     onChange={() => toggleHoliday(holiday.date)}
-                    className="h-4 w-4 shrink-0 rounded border-stone-700 bg-stone-800"
+                    className="h-4 w-4 shrink-0 rounded border-line-strong bg-surface-raised"
                   />
 
-                  <span className="w-32 shrink-0 text-xs text-stone-400">
+                  <span className="w-32 shrink-0 text-xs text-muted">
                     {formatHolidayDate(holiday.date)}
                   </span>
 
-                  <span className="min-w-0 flex-1 truncate text-xs text-white">
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                     {holiday.title}
                   </span>
 
                   {holiday.inalienable ? (
                     <span
                       title="Irrenunciable: el comercio no puede abrir"
-                      className="shrink-0 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-300"
+                      className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold uppercase text-accent-strong"
                     >
                       Irrenunciable
                     </span>
@@ -413,7 +413,7 @@ export default function TimeOffPage() {
           </ul>
 
           <div className="mt-4 flex items-center justify-end gap-3">
-            <span className="mr-auto text-[11px] text-stone-500">
+            <span className="mr-auto text-[11px] text-text-subtle">
               {pickedHolidays.size === 0
                 ? "Ninguno seleccionado"
                 : `${pickedHolidays.size} seleccionados`}
@@ -425,7 +425,7 @@ export default function TimeOffPage() {
                 setShowHolidays(false);
                 setPickedHolidays(new Set());
               }}
-              className="rounded-lg px-4 py-2 text-xs font-semibold text-stone-300 transition hover:bg-stone-800"
+              className="rounded-lg px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-raised"
             >
               Cancelar
             </button>
@@ -435,7 +435,7 @@ export default function TimeOffPage() {
               data-confirm-holidays="true"
               disabled={pickedHolidays.size === 0 || isAddingHolidays}
               onClick={() => void handleAddHolidays()}
-              className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isAddingHolidays
                 ? "Añadiendo..."
@@ -448,11 +448,11 @@ export default function TimeOffPage() {
       {showForm ? (
         <div
           data-timeoff-form="true"
-          className="mb-6 rounded-2xl border border-stone-800 bg-stone-950/60 p-5"
+          className="mb-6 rounded-2xl border border-line bg-background/60 p-5"
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
                 Desde
               </span>
               <input
@@ -471,12 +471,12 @@ export default function TimeOffPage() {
                         : e.target.value,
                   }))
                 }
-                className="w-full rounded-lg border-stone-800 bg-stone-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                className="w-full rounded-lg border-line bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
               />
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
                 Hasta
               </span>
               <input
@@ -487,12 +487,12 @@ export default function TimeOffPage() {
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, endsOn: e.target.value }))
                 }
-                className="w-full rounded-lg border-stone-800 bg-stone-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                className="w-full rounded-lg border-line bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
               />
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
                 Motivo (opcional)
               </span>
               <input
@@ -502,12 +502,12 @@ export default function TimeOffPage() {
                   setDraft((d) => ({ ...d, reason: e.target.value }))
                 }
                 placeholder="Feriado nacional"
-                className="w-full rounded-lg border-stone-800 bg-stone-950 px-3 py-2 text-sm text-white placeholder-stone-600 outline-none focus:border-amber-400"
+                className="w-full rounded-lg border-line bg-background px-3 py-2 text-sm text-foreground placeholder-text-subtle outline-none focus:border-accent"
               />
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
                 A quién afecta
               </span>
               <select
@@ -516,7 +516,7 @@ export default function TimeOffPage() {
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, professionalId: e.target.value }))
                 }
-                className="w-full rounded-lg border-stone-800 bg-stone-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                className="w-full rounded-lg border-line bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
               >
                 <option value="">Todo el negocio</option>
                 {professionals.map((professional) => (
@@ -528,7 +528,7 @@ export default function TimeOffPage() {
             </label>
           </div>
 
-          <p className="mt-3 text-[11px] text-stone-500">
+          <p className="mt-3 text-[11px] text-text-subtle">
             Se bloquean los días completos, de 00:00 a 23:59 (hora de{" "}
             {BUSINESS_TIME_ZONE === "America/Santiago"
               ? "Chile"
@@ -543,7 +543,7 @@ export default function TimeOffPage() {
                 setShowForm(false);
                 setDraft(emptyDraft());
               }}
-              className="rounded-lg px-4 py-2 text-xs font-semibold text-stone-300 transition hover:bg-stone-800"
+              className="rounded-lg px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-raised"
             >
               Cancelar
             </button>
@@ -552,7 +552,7 @@ export default function TimeOffPage() {
               data-create-timeoff="true"
               disabled={!canSubmit || isSaving}
               onClick={() => void handleCreate()}
-              className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isSaving ? "Guardando..." : "Bloquear fechas"}
             </button>
@@ -561,15 +561,15 @@ export default function TimeOffPage() {
       ) : null}
 
       {blocks.length === 0 ? (
-        <div className="rounded-2xl border border-stone-800 bg-stone-950/40 p-10 text-center">
-          <Ban className="mx-auto mb-3 h-6 w-6 text-stone-600" />
-          <p className="text-sm text-stone-400">No tienes bloqueos próximos.</p>
-          <p className="mt-1 text-[11px] text-stone-500">
+        <div className="rounded-2xl border border-line bg-background/40 p-10 text-center">
+          <Ban className="mx-auto mb-3 h-6 w-6 text-text-subtle" />
+          <p className="text-sm text-muted">No tienes bloqueos próximos.</p>
+          <p className="mt-1 text-[11px] text-text-subtle">
             Tu agenda sigue el horario de atención en todas las fechas.
           </p>
         </div>
       ) : (
-        <ul className="overflow-hidden rounded-2xl border border-stone-800">
+        <ul className="overflow-hidden rounded-2xl border border-line">
           {blocks.map((block, index) => {
             const who = professionalName(block.professionalId);
             const isPast = !isOngoing(block);
@@ -579,22 +579,22 @@ export default function TimeOffPage() {
                 key={block.id}
                 data-timeoff-id={block.id}
                 className={`flex flex-wrap items-center gap-3 px-4 py-3 ${
-                  index > 0 ? "border-t border-stone-800" : ""
-                } ${isPast ? "bg-stone-950/40" : ""}`}
+                  index > 0 ? "border-t border-line" : ""
+                } ${isPast ? "bg-background/40" : ""}`}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
                     {formatRange(block.startsAt, block.endsAt)}
                     {isOngoing(block) ? (
-                      <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-300">
+                      <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold uppercase text-accent-strong">
                         En curso
                       </span>
                     ) : null}
                   </p>
 
-                  <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-stone-400">
+                  <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                     {block.reason ? <span>{block.reason}</span> : null}
-                    <span className="text-stone-600">
+                    <span className="text-text-subtle">
                       {daysBetween(block)}{" "}
                       {daysBetween(block) === 1 ? "día" : "días"}
                     </span>
@@ -606,13 +606,13 @@ export default function TimeOffPage() {
                   <p className="mt-1.5 flex items-center gap-1.5 text-[11px]">
                     {who ? (
                       <>
-                        <Users className="h-3 w-3 text-stone-500" />
-                        <span className="text-stone-400">Solo {who}</span>
+                        <Users className="h-3 w-3 text-text-subtle" />
+                        <span className="text-muted">Solo {who}</span>
                       </>
                     ) : (
                       <>
-                        <Ban className="h-3 w-3 text-amber-300" />
-                        <span className="font-semibold text-amber-300">
+                        <Ban className="h-3 w-3 text-accent-strong" />
+                        <span className="font-semibold text-accent-strong">
                           Todo el negocio
                         </span>
                       </>
@@ -626,7 +626,7 @@ export default function TimeOffPage() {
                   onClick={() => void handleDelete(block)}
                   disabled={deletingId === block.id}
                   title="Quitar el bloqueo"
-                  className="rounded-lg p-2 text-stone-500 transition hover:bg-stone-800 hover:text-red-300 disabled:opacity-40"
+                  className="rounded-lg p-2 text-text-subtle transition hover:bg-surface-raised hover:text-danger disabled:opacity-40"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

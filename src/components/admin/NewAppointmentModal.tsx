@@ -95,6 +95,31 @@ export function NewAppointmentModal({
     );
   }, [selectedService, startsAt]);
 
+  /**
+   * El telefono de la ficha nueva, solo con digitos y con el pais delante.
+   *
+   * Se acepta lo que el usuario escriba (`+56 9 1234 5678`, `912345678`) y se
+   * normaliza a `+56XXXXXXXXX`, que es el mismo formato que guarda el resto del
+   * sistema. Sin esto, la misma ficha tendria formas distintas segun por donde
+   * se creara, y el boton de WhatsApp tendria que adivinar el pais otra vez.
+   */
+  function normalizedPhone(raw: string): string {
+    let digits = raw.replace(/\D/g, "");
+
+    if (digits.startsWith("56") && digits.length > 9) {
+      digits = digits.slice(2);
+    }
+
+    return digits ? `+56${digits}` : "";
+  }
+
+  /** Cuantos digitos nacionales hay escritos. */
+  const newPatientPhoneDigits = newPatientPhone.replace(/\D/g, "").replace(/^56(?=\d{9})/, "").length;
+
+  /** El alta exige nombre y un telefono **completo** (9 digitos). */
+  const canCreatePatient =
+    newPatientName.trim().length > 0 && newPatientPhoneDigits === 9;
+
   async function handleCreatePatient() {
     const name = newPatientName.trim();
     if (!name) return null;
@@ -108,7 +133,9 @@ export function NewAppointmentModal({
         tenantId: "",
         firstName,
         lastName: rest.join(" ") || "-",
-        phone: newPatientPhone.trim() || undefined,
+        // Obligatorio desde el punto 5.2 del backlog: sin telefono el negocio
+        // no puede avisar de un cambio, y es la via de las reservas por broma.
+        phone: normalizedPhone(newPatientPhone),
       });
 
       setPatients((current) => [...current, created]);
@@ -257,9 +284,12 @@ export function NewAppointmentModal({
                   />
                   <input
                     data-new-patient-phone="true"
+                    type="tel"
+                    inputMode="numeric"
                     value={newPatientPhone}
                     onChange={(e) => setNewPatientPhone(e.target.value)}
-                    placeholder="Teléfono (opcional)"
+                    placeholder="Teléfono (obligatorio) · 9 1234 5678"
+                    required
                     className={inputClass}
                   />
                   <div className="flex justify-end gap-2">
@@ -276,7 +306,7 @@ export function NewAppointmentModal({
                       type="button"
                       data-create-patient="true"
                       onClick={() => void handleCreatePatient()}
-                      disabled={!newPatientName.trim()}
+                      disabled={!canCreatePatient}
                       className="rounded-md bg-amber-400 px-3 py-1 text-[11px] font-bold text-black disabled:opacity-40"
                     >
                       Crear paciente

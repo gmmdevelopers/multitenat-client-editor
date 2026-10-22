@@ -2,6 +2,8 @@
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 
+import { isIconProp, isLinkProp } from "@/utils/InputsTypeHelper";
+
 /**
  * Lista de objetos editables dentro de un item de otra lista.
  *
@@ -10,6 +12,10 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
  * anidacion: al llegar a la lista interna la mostraba como texto de solo
  * lectura (`0`, `1`, `2`). Con esto, cada red social tiene sus inputs y sus
  * botones de anadir y borrar, igual que cualquier otra lista.
+ *
+ * Es un componente y no una funcion de render porque las listas pueden
+ * anidarse a mas profundidad y una funcion recursiva dentro del panel seria
+ * mas dificil de seguir.
  */
 export interface NestedListProps {
   /** Etiqueta visible de la lista (`Social links`). */
@@ -30,6 +36,8 @@ export interface NestedListProps {
     onChange: (next: unknown) => void,
     locationKey: string,
   ) => React.ReactNode;
+  /** Que valor inicial tiene un item nuevo, segun sus claves. */
+  emptyItemKeys?: string[];
 }
 
 export function NestedList({
@@ -42,6 +50,7 @@ export function NestedList({
   onAdd,
   onRemove,
   renderField,
+  emptyItemKeys,
 }: NestedListProps) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-stone-800 bg-stone-950/60 p-2">
@@ -80,12 +89,6 @@ export function NestedList({
 
       {!isCollapsed ? (
         <div className="flex flex-col gap-2">
-          {items.length === 0 ? (
-            <p className="rounded-md border border-dashed border-stone-800 p-2 text-center text-[10px] text-stone-600">
-              Sin elementos. Pulsa «Añadir».
-            </p>
-          ) : null}
-
           {items.map((item, index) => (
             <div
               key={`${idPrefix}-${index}`}
@@ -105,28 +108,53 @@ export function NestedList({
                 </button>
               </div>
 
-              {typeof item === "object" && item !== null ? (
-                Object.entries(item as Record<string, unknown>).map(
-                  ([fieldKey, fieldValue]) =>
-                    renderField(
-                      fieldKey,
-                      fieldValue,
-                      (next) => onChange(index, fieldKey, next),
-                      `${idPrefix}-${index}-${fieldKey}`,
-                    ),
-                )
-              ) : (
-                renderField(
-                  "value",
-                  item,
-                  (next) => onChange(index, "", next),
-                  `${idPrefix}-${index}`,
-                )
-              )}
+              {typeof item === "object" && item !== null
+                ? Object.entries(item as Record<string, unknown>).map(
+                    ([fieldKey, fieldValue]) =>
+                      renderField(
+                        fieldKey,
+                        fieldValue,
+                        (next) => onChange(index, fieldKey, next),
+                        `${idPrefix}-${index}-${fieldKey}`,
+                      ),
+                  )
+                : renderField(
+                    "value",
+                    item,
+                    (next) => onChange(index, "", next),
+                    `${idPrefix}-${index}`,
+                  )}
+
+              {items.length === 0 ? (
+                <p className="text-[10px] text-stone-600">
+                  Sin elementos. Pulsa «Añadir».
+                </p>
+              ) : null}
             </div>
           ))}
+
+          {items.length === 0 ? (
+            <p className="rounded-md border border-dashed border-stone-800 p-2 text-center text-[10px] text-stone-600">
+              {emptyItemKeys?.length
+                ? `Sin elementos. Pulsa «Añadir» para crear uno con ${emptyItemKeys.join(", ")}.`
+                : "Sin elementos. Pulsa «Añadir»."}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
+}
+
+/** Claves sugeridas para un item nuevo, segun su forma. */
+export function inferItemKeys(item: unknown): string[] {
+  if (!item || typeof item !== "object") return [];
+  return Object.keys(item as Record<string, unknown>);
+}
+
+/** Icono por defecto de un campo, para el item nuevo de una lista. */
+export function defaultValueFor(key: string): unknown {
+  if (isIconProp(key)) return "FaInstagram";
+  if (isLinkProp(key)) return "https://";
+  return "";
 }

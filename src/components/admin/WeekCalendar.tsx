@@ -323,8 +323,18 @@ export function WeekCalendar({
                           (offsetY / HOUR_HEIGHT) * 60;
                         const snapped = Math.floor(rawMinutes / 30) * 30;
 
+                        // `snapped` son MINUTOS desde medianoche (p. ej. 570 =
+                        // 9:30), no una hora. Hay que partirlo en horas y
+                        // minutos: pasarlo entero como primer argumento de
+                        // `setHours` lo interpreta como hora (0-23) y con 570
+                        // el `Date` desborda a un instante invalido.
                         const startsAt = new Date(day);
-                        startsAt.setHours(0, snapped, 0, 0);
+                        startsAt.setHours(
+                          Math.floor(snapped / 60),
+                          snapped % 60,
+                          0,
+                          0,
+                        );
 
                         onSlotClick({ professional: active, startsAt });
                       }}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppointmentScheduler } from "@multitenant/design-system";
 import type {
   SchedulerOpeningDay,
@@ -45,6 +46,28 @@ export function ConnectedScheduler({
   description,
   accentColor,
 }: CurrentSchedulerProps) {
+  /**
+   * Si el sitio se esta viendo DENTRO de la app movil.
+   *
+   * La WebView añade `&embed=app` a la URL. Con ese parametro la agenda **no se
+   * monta**: agendar y pagar dentro de una WebView trae problemas (el checkout
+   * no vuelve bien), y la app ya tiene su agenda nativa.
+   *
+   * ## En un navegador NO cambia nada
+   *
+   * El parametro solo lo pone la app. Si alguien copia la URL y la abre en el
+   * navegador, el parametro se pierde y la agenda aparece — que es justo lo que
+   * se quiere.
+   *
+   * ## Por que `useSearchParams` y no leer `window` al renderizar
+   *
+   * `useSearchParams` funciona tambien en el render de servidor y al montar,
+   * mientras que `window` no existe ahi. Es el mismo hook que ya usa la pagina
+   * publica para el `slug`.
+   */
+  const searchParams = useSearchParams();
+  const isEmbeddedInApp = searchParams.get("embed") === "app";
+
   const [services, setServices] = useState<SchedulerService[]>([]);
   const [professionals, setProfessionals] = useState<SchedulerProfessional[]>([]);
   const [openingHours, setOpeningHours] = useState<SchedulerOpeningDay[]>([]);
@@ -69,9 +92,18 @@ export function ConnectedScheduler({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Las listas NO se piden si la agenda no se va a montar.
+   *
+   * Dentro de la app la seccion se sustituye por un aviso, asi que pedir
+   * servicios, profesionales, horario y politica de cobro seria **cuatro
+   * peticiones para pintar un texto**.
+   */
   useEffect(() => {
-    // Las tres listas se piden juntas: el agendador necesita todas para el paso
-    // 1, y pedirlas en serie retrasaria el primer pintado sin motivo.
+    if (isEmbeddedInApp) return;
+
+    // Las listas se piden juntas: el agendador necesita todas para el paso 1, y
+    // pedirlas en serie retrasaria el primer pintado sin motivo.
     void Promise.all([
       listPublicServices(),
       listPublicProfessionals(),
@@ -137,6 +169,35 @@ export function ConnectedScheduler({
 
     setPaymentAmount(amount > 0 ? amount : null);
   }, [selectedServiceId, services, policy]);
+
+  /**
+   * Dentro de la app se explica donde reservar, en vez de dar un formulario que
+   * llevaria a un pago dentro de una WebView.
+   */
+  if (isEmbeddedInApp) {
+    return (
+      <section
+        data-scheduler-hidden-in-app="true"
+        className="flex w-full flex-col items-center justify-center bg-[#ECF5FB] px-6 py-16 text-center"
+      >
+        <p className="text-center text-base font-bold text-[#1F2A44]">
+          Reserva desde la app
+        </p>
+        {/**
+         * `flex` en el padre + `text-center` aqui.
+         *
+         * `mx-auto` no bastaba: el ancho del padre depende de como lo monte el
+         * organismo del design system, y en un contenedor flex el `max-w` no
+         * centra por si solo. Con `items-center` en el padre y `max-w-md` aqui,
+         * el bloque queda centrado en cualquier contexto.
+         */}
+        <p className="mt-2 max-w-md text-center text-sm leading-relaxed text-[#566593]">
+          Para agendar y pagar una cita, vuelve a la app de Multitenant. Aquí
+          puedes consultar los servicios, el horario y los datos del negocio.
+        </p>
+      </section>
+    );
+  }
 
   if (error) {
     return (

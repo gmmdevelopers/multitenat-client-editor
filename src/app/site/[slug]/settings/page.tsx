@@ -6,6 +6,7 @@ import { buildSiteUrl, buildTenantDomain } from "@/lib/tenant-domain";
 import {
   AlertCircle,
   ArrowLeft,
+  Bell,
   CheckCircle2,
   CreditCard,
   Globe,
@@ -26,6 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage } from "@/lib/api/errors";
 import {
+  deactivateCustomDomain,
   getCurrentSite,
   getPublicationSummary,
   requestCustomDomain,
@@ -35,19 +37,29 @@ import {
 } from "@/lib/api/sites";
 import { updateTenant } from "@/lib/api/tenants";
 import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
+import { StaffPushSettings } from "@/components/settings/StaffPushSettings";
 import type { TenantImage } from "@/lib/api/uploads";
 import type { Site } from "@/types/site";
 import type { DomainRequestStatus } from "@/types/site";
 
-/** Texto del estado de la solicitud de dominio. */
+/**
+ * Texto del estado de la solicitud de dominio.
+ *
+ * ## Sin mencion de precio
+ *
+ * El cobro de la configuracion manual **se elimino**: al automatizarlo, no habia
+ * razon para seguir cobrandolo. Los textos decian "$10.000 unica vez" en tres
+ * sitios y no quedaba ninguno cierto.
+ */
 const DOMAIN_STATUS_COPY: Record<DomainRequestStatus, string> = {
   none: "Conecta tu propio dominio para que tus clientes te encuentren por tu marca.",
   requested:
-    "Recibimos tu solicitud. Te contactamos para coordinar la configuración.",
-  configuring: "Estamos configurando la redirección de tu dominio.",
+    "Recibimos tu solicitud. Te enviamos los nameservers que debes apuntar en tu registrador.",
+  configuring:
+    "Estamos esperando a que tu dominio propague. Suele tardar entre unos minutos y 24 horas.",
   active: "Tu dominio propio está activo y respondiendo.",
   rejected:
-    "No pudimos completar la solicitud. Revisa los datos y vuelve a enviarla.",
+    "No pudimos completar la conexión. Revisa los datos y vuelve a enviarla.",
 };
 
 const DOMAIN_STATUS_LABEL: Record<DomainRequestStatus, string> = {
@@ -334,9 +346,53 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Desconecta el dominio propio.
+   *
+   * ## Por que se pide confirmacion
+   *
+   * Desconectar deja la web solo en el subdominio. Si fue un clic por error, el
+   * cliente lo nota cuando su tarjeta impresa ya no lleva a ningun sitio. La
+   * confirmacion usa `window.confirm` a proposito: es una accion rara, y montar
+   * un modal propio para algo que pasa una vez al ano no compensa.
+   */
+  async function handleDeactivateDomain() {
+    if (!site) return;
+
+    const confirmed = window.confirm(
+      "¿Desconectar el dominio? Tu web seguirá funcionando en el subdominio de la plataforma.",
+    );
+
+    if (!confirmed) return;
+
+    setIsRequestingDomain(true);
+    try {
+      hasLocalChangesRef.current = true;
+      const updated = await deactivateCustomDomain(site.id);
+      setSite(updated);
+      toast.info("Dominio desconectado. Tu web sigue en el subdominio.");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "No se pudo desconectar el dominio."));
+    } finally {
+      setIsRequestingDomain(false);
+    }
+  }
+
   /** Envia la solicitud de dominio. La configuracion la hacemos nosotros. */
   async function handleRequestDomain() {
-    if (!site || !domainName.trim()) return;
+    if (!site) return;
+
+    /**
+     * El campo vacio se avisa, no se ignora.
+     *
+     * Antes hacia `return` en silencio: el cliente tocaba "Enviar" con el campo
+     * vacio y **no pasaba nada** — ni error, ni mensaje, ni el formulario se
+     * cerraba. Parecia que el boton estaba roto.
+     */
+    if (!domainName.trim()) {
+      toast.error("Escribe el dominio que quieres conectar. Ej: mi-clinica.cl");
+      return;
+    }
 
     setIsRequestingDomain(true);
     try {
@@ -357,6 +413,27 @@ export default function SettingsPage() {
       toast.error(getErrorMessage(err, "No se pudo enviar la solicitud."));
     } finally {
       setIsRequestingDomain(false);
+    }
+  }
+
+  /**
+   * Copia un nameserver al portapapeles.
+   *
+   * ## Por que con `catch` y un aviso
+   *
+   * `navigator.clipboard` **solo existe en contexto seguro** (https o
+   * localhost). En algunos entornos del cliente no esta disponible, y sin el
+   * `catch` el boton no hace nada y parece roto.
+   *
+   * El texto esta con `select-all`: si falla la copia, el cliente puede
+   * seleccionarlo con doble clic y copiar con el teclado.
+   */
+  async function handleCopy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Copiado");
+    } catch {
+      toast.error("No pudimos copiar. Selecciona el texto y cópialo a mano.");
     }
   }
 
@@ -716,8 +793,8 @@ export default function SettingsPage() {
           Dominio
         </h2>
         <p className="mb-5 text-xs text-stone-400">
-          Por defecto usas un subdominio de la plataforma. Puedes conectar tu
-          propio dominio pagando la implementación por única vez.
+          Por defecto usas un subdominio de la plataforma. Si ya tienes un
+          dominio propio, puedes conectarlo aquí.
         </p>
 
         {/* Subdominio incluido */}
@@ -759,8 +836,8 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
-            <span className="shrink-0 rounded-full border-amber-400/40 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-300">
-              $10.000 única vez
+            <span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-400">
+              Sin costo
             </span>
           </div>
 
@@ -777,19 +854,18 @@ export default function SettingsPage() {
             <li className="flex gap-2">
               <span className="font-mono text-stone-500">2.</span>
               <span>
-                <strong className="text-stone-300">
-                  Paga la implementación
-                </strong>{" "}
-                ($10.000 único) y enviamos la solicitud.
+                <strong className="text-stone-300">Indícanos el dominio</strong>{" "}
+                aquí abajo. Con eso quedas en cola para conectarlo.
               </span>
             </li>
             <li className="flex gap-2">
               <span className="font-mono text-stone-500">3.</span>
               <span>
                 <strong className="text-stone-300">
-                  Nosotros configuramos
+                  Apunta los nameservers
                 </strong>{" "}
-                la redirección. Te contactamos si hace falta algún dato del DNS.
+                que te enviamos en tu registrador. Nosotros configuramos el
+                resto y te avisamos cuando esté listo.
               </span>
             </li>
           </ol>
@@ -815,6 +891,74 @@ export default function SettingsPage() {
             </div>
           ) : null}
 
+          {/*
+            El motivo del rechazo, cuando lo hay.
+
+            Se pinta SOLO en `rejected` y solo si hay texto: un `rejected` sin
+            motivo (los del flujo manual antiguo) no tiene nada que explicar, y
+            mostrar un hueco vacio confunde mas que callar.
+          */}
+          {domainRequest?.status === "rejected" && domainRequest.error ? (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+              <p className="text-[11px] leading-relaxed text-red-200">
+                {domainRequest.error}
+              </p>
+            </div>
+          ) : null}
+
+          {/*
+            Los nameservers que el cliente tiene que copiar.
+
+            ## Por que este bloque es el que hace funcionar el flujo
+
+            El resto es informacion; esto es **la unica accion** que el cliente
+            tiene que hacer para conectarse. Sin los nameservers a la vista no
+            sabe donde apuntar su dominio y todo lo demas sobra.
+
+            Se copian uno a uno y no en bloque: en el panel del registrador hay
+            **dos campos separados**, y un solo boton que copia "ns1, ns2" obliga
+            a partir el texto a mano.
+
+            `select-all` en el texto permite seleccionar copiando y pegando con
+            el teclado si el portapapeles no esta permitido (contexto no seguro).
+          */}
+          {domainRequest?.nameservers &&
+          domainRequest.nameservers.length > 0 &&
+          (domainRequest.status === "configuring" ||
+            domainRequest.status === "requested") ? (
+            <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/[0.07] p-3">
+              <p className="text-[11px] font-semibold text-amber-200">
+                Pon estos nameservers en tu registrador
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-amber-200/70">
+                Es el único paso que queda de tu parte. Puede tardar hasta 24
+                horas en propagar y el dominio se conecta solo.
+              </p>
+
+              <div className="mt-3 grid gap-2">
+                {domainRequest.nameservers.map((nameserver) => (
+                  <div
+                    key={nameserver}
+                    className="flex items-center justify-between gap-2 rounded-md border border-amber-400/20 bg-stone-950/60 px-3 py-2"
+                  >
+                    <code className="select-all font-mono text-[11px] text-white">
+                      {nameserver}
+                    </code>
+                    <button
+                      type="button"
+                      data-copy-nameserver={nameserver}
+                      onClick={() => void handleCopy(nameserver)}
+                      className="shrink-0 text-[10px] font-bold uppercase text-amber-300 transition hover:text-amber-200"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {!showDomainForm &&
           domainRequest?.status !== "requested" &&
           domainRequest?.status !== "configuring" &&
@@ -825,8 +969,37 @@ export default function SettingsPage() {
               onClick={() => setShowDomainForm(true)}
               className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300"
             >
-              Solicitar dominio propio
+              {domainRequest?.status === "rejected"
+                ? "Volver a intentarlo"
+                : "Conectar mi dominio"}
             </button>
+          ) : null}
+
+          {/*
+            Desconectar.
+
+            Solo con el dominio ACTIVE: es cuando deja de resolverse algo. En
+            `requested`/`configuring` no hay nada que desconectar todavia (la
+            columna esta vacia) y el boton no haria nada.
+
+            La web del cliente NO se cae: sigue en su subdominio, que es lo que
+            dice el aviso.
+          */}
+          {domainRequest?.status === "active" && !showDomainForm ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[10px] leading-relaxed text-stone-500">
+                Si lo desconectas, tu web sigue funcionando en el subdominio.
+              </p>
+              <button
+                type="button"
+                data-disconnect-domain="true"
+                onClick={() => void handleDeactivateDomain()}
+                disabled={isRequestingDomain}
+                className="rounded-lg px-4 py-2 text-xs font-semibold text-stone-300 transition hover:bg-stone-800 disabled:opacity-40"
+              >
+                {isRequestingDomain ? "Desconectando..." : "Desconectar dominio"}
+              </button>
+            </div>
           ) : null}
 
           {showDomainForm ? (
@@ -1042,6 +1215,19 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* --- Notificaciones --- */}
+      <section id="notificaciones" className="scroll-mt-6 mb-6 rounded-2xl border-stone-800 bg-stone-900/50 p-6">
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-bold text-white">
+          <Bell className="h-4 w-4 text-amber-300" />
+          Notificaciones
+        </h2>
+        <p className="mb-5 text-xs text-stone-400">
+          Avisos de la agenda en este navegador, incluso con el panel cerrado.
+        </p>
+
+        <StaffPushSettings />
+      </section>
+
       {/* --- Pagos --- */}
       <section id="pagos" className="scroll-mt-6 rounded-2xl border-stone-800 bg-stone-900/50 p-6">
         <h2 className="mb-1 flex items-center gap-2 text-sm font-bold text-white">
@@ -1131,6 +1317,7 @@ const SETTINGS_SECTIONS = [
   { id: "dominio", label: "Dominio" },
   { id: "plan", label: "Plan" },
   { id: "correo", label: "Correo de contacto" },
+  { id: "notificaciones", label: "Notificaciones" },
   { id: "pagos", label: "Cobros" },
 ] as const;
 

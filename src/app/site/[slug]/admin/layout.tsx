@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CalendarClock,
@@ -9,10 +9,13 @@ import {
   CalendarOff,
   Clock,
   Inbox,
+  LogOut,
   Menu,
   MessageSquare,
+  ShieldCheck,
   Tag,
   UserRound,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
@@ -21,6 +24,7 @@ import { useEffect, useState } from "react";
 import { DepositNoticeBanner } from "@/components/DepositNoticeBanner";
 import { useAuth } from "@/context/AuthContext";
 import { getUnreadCount } from "@/lib/api/inbox";
+import { allowedAdminSections, canUseEditor } from "@/lib/role-routing";
 
 /**
  * Secciones del panel de administración.
@@ -53,6 +57,20 @@ const SECTIONS = [
     href: "chats",
     icon: MessageSquare,
     description: "Mensajes que te escriben tus pacientes desde la app.",
+  },
+  {
+    /**
+     * Pacientes: las fichas del negocio.
+     *
+     * Va DESPUES de Chats —se llega desde una conversacion o desde una cita— y
+     * ANTES de Profesionales: es informacion del dia a dia (quien llama), no
+     * configuracion del equipo.
+     */
+    key: "patients",
+    label: "Pacientes",
+    href: "patients",
+    icon: Users,
+    description: "Las fichas de quienes atendiste y su historial.",
   },
   {
     key: "professionals",
@@ -107,6 +125,16 @@ const SECTIONS = [
     icon: Inbox,
     description: "Mensajes que enviaron tus visitantes.",
   },
+  {
+    // La ultima, y con `ShieldCheck` en vez del icono de personas: no es "mas
+    // gente", es **quien puede hacer que**. Va separada del resto porque
+    // asignar roles es la llave del negocio, no una tarea del dia a dia.
+    key: "team",
+    label: "Equipo",
+    href: "team",
+    icon: ShieldCheck,
+    description: "Quién entra al panel y qué puede hacer.",
+  },
 ] as const;
 
 /**
@@ -131,8 +159,9 @@ export default function AdminLayout({
   // se puede resolver en un componente de servidor. El layout del panel ya usa
   // este mismo patron.
   const routeParams = useParams<{ slug: string }>();
-  const { user, tenant, loading } = useAuth();
+  const { user, tenant, loading, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(true);
 
   /**
@@ -172,7 +201,7 @@ export default function AdminLayout({
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="animate-pulse text-sm text-stone-400">
+        <span className="animate-pulse text-sm text-muted">
           Cargando panel...
         </span>
       </div>
@@ -183,18 +212,47 @@ export default function AdminLayout({
 
   const basePath = `/site/${routeParams?.slug ?? ""}/admin`;
 
+  /**
+   * Que secciones ve este rol.
+   *
+   * `null` = todas (`owner` y `admin`, que administran el negocio entero). Una
+   * lista = solo esas (`receptionist`: agenda y chats).
+   *
+   * Se filtra aqui y no en el array `SECTIONS` para no duplicar la declaracion:
+   * una seccion nueva aparece sola para los roles con acceso completo.
+   */
+  const allowed = allowedAdminSections(user.role);
+  const visibleSections = allowed
+    ? SECTIONS.filter((section) => allowed.includes(section.key))
+    : SECTIONS;
+
+  /**
+   * El boton del pie cambia segun lo que el rol pueda hacer.
+   *
+   * ## Por que NO basta con esconder el editor
+   *
+   * Para quien no puede abrir el canvas, "Volver al editor" seria un enlace a
+   * una pantalla que lo devuelve aqui (el layout del sitio lo redirige). Un boton
+   * que rebota es peor que no tenerlo: parece roto.
+   *
+   * Y esas personas necesitan **salir de la aplicacion**, que es lo que el panel
+   * no ofrece en ningun otro sitio: la navegacion de usuario vive en la toolbar
+   * del editor, que es justo a la que no tienen acceso.
+   */
+  const showEditorLink = canUseEditor(user.role);
+
   return (
     <div className="flex h-full min-h-0">
       {/* Drawer lateral */}
       <aside
         data-admin-drawer={isOpen ? "open" : "closed"}
-        className={`flex shrink-0 flex-col border-r border-stone-800 bg-stone-950 transition-all duration-200 ${
+        className={`flex shrink-0 flex-col border-r border-line bg-background transition-all duration-200 ${
           isOpen ? "w-64" : "w-14"
         }`}
       >
-        <div className="flex h-14 items-center justify-between border-b border-stone-800 px-3">
+        <div className="flex h-14 items-center justify-between border-b border-line px-3">
           {isOpen ? (
-            <span className="truncate text-xs font-bold uppercase tracking-wider text-amber-300">
+            <span className="truncate text-xs font-bold uppercase tracking-wider text-accent-strong">
               Administración
             </span>
           ) : null}
@@ -204,7 +262,7 @@ export default function AdminLayout({
             data-toggle-drawer="true"
             onClick={() => setIsOpen((current) => !current)}
             aria-label={isOpen ? "Cerrar menú" : "Abrir menú"}
-            className="rounded-md p-1.5 text-stone-400 transition hover:bg-stone-800 hover:text-white"
+            className="rounded-md p-1.5 text-muted transition hover:bg-surface-raised hover:text-foreground"
           >
             {isOpen ? (
               <X className="h-4 w-4" />
@@ -215,7 +273,7 @@ export default function AdminLayout({
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 p-2">
-          {SECTIONS.map((section) => {
+          {visibleSections.map((section) => {
             const href = `${basePath}/${section.href}`;
             const isActive = pathname === href;
             const Icon = section.icon;
@@ -228,8 +286,8 @@ export default function AdminLayout({
                 title={isOpen ? undefined : section.label}
                 className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold transition ${
                   isActive
-                    ? "bg-amber-400/15 text-amber-300"
-                    : "text-stone-400 hover:bg-stone-800 hover:text-white"
+                    ? "bg-accent/15 text-accent-strong"
+                    : "text-muted hover:bg-surface-raised hover:text-foreground"
                 } ${isOpen ? "" : "justify-center"}`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -246,7 +304,7 @@ export default function AdminLayout({
                 {section.key === "chats" && unread > 0 ? (
                   <span
                     data-unread-badge={unread}
-                    className={`shrink-0 rounded-full bg-amber-400 text-[10px] font-bold text-black ${
+                    className={`shrink-0 rounded-full bg-accent text-[10px] font-bold text-on-accent ${
                       isOpen
                         ? "px-1.5 py-0.5"
                         : "absolute right-1.5 top-1.5 h-2 w-2 p-0 text-transparent"
@@ -261,34 +319,68 @@ export default function AdminLayout({
         </nav>
 
         {isOpen ? (
-          <div className="border-t border-stone-800 p-3">
-            {/* Vuelta al editor. Va en el pie, separado de las secciones: no es
-                otra pantalla del panel, es salir de el. */}
+          <div className="border-t border-line p-3">
+            {/*
+              Pie del drawer: la SALIDA.
+
+              Para quien puede usar el canvas, es "volver al editor". Para el
+              resto (recepcion), es "cerrar sesion": su unica pantalla es esta,
+              asi que volver al editor no existe y necesitan poder salir.
+            */}
+            {showEditorLink ? (
+              <Link
+                href={`/site/${routeParams?.slug ?? ""}/editor`}
+                data-admin-back-to-editor="true"
+                className="mb-3 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted transition hover:bg-surface-raised hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Volver al editor
+              </Link>
+            ) : (
+              <button
+                type="button"
+                data-admin-logout="true"
+                onClick={() => void logout()}
+                className="mb-3 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted transition hover:bg-surface-raised hover:text-foreground"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Cerrar sesión
+              </button>
+            )}
+
+            <p className="truncate text-[11px] font-semibold text-foreground">
+              {tenant.name}
+            </p>
+            <p className="truncate text-[10px] text-text-subtle">{user.email}</p>
+          </div>
+        ) : (
+          /*
+            Con el drawer cerrado el boton se queda en icono: sin el, salir
+            exigiria abrir el menu primero.
+
+            Se cambia el icono y el destino segun el rol, igual que arriba: una
+            flecha "atras" que lleva a una pantalla que rebota seria engañosa.
+          */
+          showEditorLink ? (
             <Link
               href={`/site/${routeParams?.slug ?? ""}/editor`}
               data-admin-back-to-editor="true"
-              className="mb-3 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-400 transition hover:bg-stone-800 hover:text-white"
+              title="Volver al editor"
+              className="flex items-center justify-center border-t border-line py-3 text-muted transition hover:bg-surface-raised hover:text-foreground"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Volver al editor
+              <ArrowLeft className="h-4 w-4" />
             </Link>
-
-            <p className="truncate text-[11px] font-semibold text-white">
-              {tenant.name}
-            </p>
-            <p className="truncate text-[10px] text-stone-500">{user.email}</p>
-          </div>
-        ) : (
-          /* Con el drawer cerrado el enlace se queda en icono: sin el, volver al
-             editor exigiria abrir el menu primero. */
-          <Link
-            href={`/site/${routeParams?.slug ?? ""}/editor`}
-            data-admin-back-to-editor="true"
-            title="Volver al editor"
-            className="flex items-center justify-center border-t border-stone-800 py-3 text-stone-400 transition hover:bg-stone-800 hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          ) : (
+            <button
+              type="button"
+              data-admin-logout="true"
+              onClick={() => void logout()}
+              title="Cerrar sesión"
+              className="flex items-center justify-center border-t border-line py-3 text-muted transition hover:bg-surface-raised hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          )
         )}
       </aside>
 
@@ -299,7 +391,7 @@ export default function AdminLayout({
             configura la agenda. */}
         <DepositNoticeBanner />
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-stone-900">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-surface">
           {children}
         </div>
       </div>

@@ -7,7 +7,6 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
 import { loginRequest, logoutRequest, getMe } from "@/lib/api/auth";
 import type { AdminUser, TenantContextInfo } from "@/types/tenant";
 
@@ -36,7 +35,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [tenant, setTenant] = useState<TenantContextInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -88,9 +86,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(loggedUser);
     setTenant(loggedUser.tenant ?? null);
 
-    // `/` resuelve el site y la pagina home del tenant, y desde ahi manda al
-    // editor con el `pageId` correcto.
-    router.push("/");
+    /**
+     * Navegacion COMPLETA, no `router.push`.
+     *
+     * ## El bug que arregla
+     *
+     * Con `router.push("/")` la navegacion es **de cliente** (SPA), y en una
+     * navegacion de cliente el **proxy (middleware) NO se ejecuta**. Como el
+     * panel es agnostico al tenant y `/` se reescribe a `/site/<slug>` **en el
+     * proxy**, la sesion recien creada no se aplicaba: el cliente entraba y
+     * tenia que **recargar a mano** para que el proxy viera las cookies.
+     *
+     * ## Por que aqui SI conviene recargar
+     *
+     * Recargar la pagina es justo lo que se busca: acaba de cambiar **la
+     * sesion**, y con ella las cookies (`accessToken`, `x-org-slug`) y lo que el
+     * proxy debe resolver. Todo el estado del servidor tiene que recomponerse, y
+     * una navegacion de cliente se lo salta.
+     *
+     * No se usa `router.refresh()`: esa refresca los componentes del servidor
+     * **sin** volver a ejecutar el middleware, que es lo que falla aqui.
+     */
+    window.location.href = "/";
   };
 
   const logout = async () => {
@@ -100,10 +117,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // La sesión local se limpia igual aunque el backend falle.
     }
     clearToken();
+
+    /**
+     * Al salir tambien se borra `x-org-slug`.
+     *
+     * Es la cookie con la que el proxy sabe **que negocio** esta abierto. Sin
+     * borrarla, al entrar con OTRA cuenta el proxy seguiria reescribiendo al
+     * negocio anterior hasta que se renovara al iniciar sesion: un instante en
+     * el que se verian datos del negocio equivocado.
+     */
+    document.cookie = "x-org-slug=; path=/; max-age=0; samesite=lax";
+
     localStorage.removeItem("user");
     setUser(null);
     setTenant(null);
-    router.push("/login");
+
+    /**
+     * Navegacion COMPLETA, por el mismo motivo que en `login`.
+     *
+     * Con `router.push` el proxy (middleware) **no se ejecuta**, asi que las
+     * cookies que se acaban de borrar seguirian contando para el servidor hasta
+     * la siguiente peticion completa. Al recargar, el proxy vuelve a decidir con
+     * el estado limpio.
+     */
+    window.location.href = "/login";
   };
 
   return (

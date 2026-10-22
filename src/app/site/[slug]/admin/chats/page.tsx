@@ -252,7 +252,7 @@ export default function ChatsPage() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-xl border-red-500/40 bg-red-500/10 p-6 text-sm text-red-400">
+        <div className="max-w-md rounded-xl border-danger/40 bg-danger/10 p-6 text-sm text-danger">
           {error}
         </div>
       </div>
@@ -263,14 +263,14 @@ export default function ChatsPage() {
     <div className="flex h-full min-h-0">
       {/* --- Lista de conversaciones --- */}
       <aside
-        className={`flex w-full shrink-0 flex-col border-r border-stone-800 md:w-80 ${
+        className={`flex w-full shrink-0 flex-col border-r border-line md:w-80 ${
           selectedId ? "hidden md:flex" : "flex"
         }`}
       >
-        <header className="border-b border-stone-800 px-4 py-4">
+        <header className="border-b border-line px-4 py-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="flex items-center gap-2 text-sm font-bold text-white">
-              <MessageSquare className="h-4 w-4 text-amber-300" />
+            <h1 className="flex items-center gap-2 text-sm font-bold text-foreground">
+              <MessageSquare className="h-4 w-4 text-accent-strong" />
               Conversaciones
             </h1>
 
@@ -289,7 +289,7 @@ export default function ChatsPage() {
               <span
                 data-socket="connected"
                 title="Recibiendo mensajes en vivo"
-                className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400"
+                className="flex items-center gap-1 text-[10px] font-semibold text-success"
               >
                 <Wifi className="h-3 w-3" />
                 En vivo
@@ -298,7 +298,7 @@ export default function ChatsPage() {
               <span
                 data-socket="disconnected"
                 title="Sin conexion en vivo: los mensajes nuevos aparecen al recargar"
-                className="flex items-center gap-1 text-[10px] font-semibold text-amber-300"
+                className="flex items-center gap-1 text-[10px] font-semibold text-accent-strong"
               >
                 <WifiOff className="h-3 w-3" />
                 Reconectando
@@ -306,7 +306,7 @@ export default function ChatsPage() {
             )}
           </div>
 
-          <p className="mt-1 text-[11px] text-stone-400">
+          <p className="mt-1 text-[11px] text-muted">
             Mensajes de tus pacientes desde la app.
           </p>
 
@@ -317,13 +317,13 @@ export default function ChatsPage() {
             activarlo tiene una consecuencia que conviene tener delante cuando
             se decide: hay que responderlo.
           */}
-          <label className="mt-3 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-stone-800 bg-stone-950/60 p-3">
+          <label className="mt-3 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-line bg-background/60 p-3">
             <span className="min-w-0">
-              <span className="block text-[11px] font-semibold text-white">
+              <span className="block text-[11px] font-semibold text-foreground">
                 {chatEnabled ? "Chat activado" : "Chat desactivado"}
               </span>
               {/* Aviso honesto: activarlo implica atenderlo. */}
-              <span className="mt-0.5 block text-[10px] leading-relaxed text-stone-400">
+              <span className="mt-0.5 block text-[10px] leading-relaxed text-muted">
                 {chatEnabled
                   ? "Tus pacientes pueden escribirte hasta 24 h después de cada visita."
                   : "Al activarlo, alguien de tu equipo debe responder los mensajes."}
@@ -336,14 +336,14 @@ export default function ChatsPage() {
               checked={chatEnabled ?? false}
               disabled={isTogglingChat || chatEnabled === null}
               onChange={(e) => void handleToggleChat(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-700 bg-stone-800"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-strong bg-surface-raised"
             />
           </label>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {conversations === null ? (
-            <p className="animate-pulse px-4 py-6 text-sm text-stone-400">
+            <p className="animate-pulse px-4 py-6 text-sm text-muted">
               Cargando...
             </p>
           ) : conversations.length === 0 ? (
@@ -356,11 +356,11 @@ export default function ChatsPage() {
                 dos cosas con soluciones opuestas: esperar, o activarlo.
               */}
               {chatEnabled === false ? (
-                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
-                  <p className="text-xs font-semibold text-amber-200">
+                <div className="rounded-xl border border-accent/40 bg-accent/10 p-4">
+                  <p className="text-xs font-semibold text-accent-strong">
                     El chat está desactivado
                   </p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-amber-200/80">
+                  <p className="mt-1 text-[11px] leading-relaxed text-accent-strong/80">
                     Tus pacientes no pueden escribirte desde la app. Actívalo
                     para recibir sus mensajes.
                   </p>
@@ -370,18 +370,18 @@ export default function ChatsPage() {
                     data-enable-chat="true"
                     onClick={() => void handleToggleChat(true)}
                     disabled={isTogglingChat}
-                    className="mt-3 rounded-lg bg-amber-400 px-3 py-1.5 text-[11px] font-bold text-black transition hover:bg-amber-300 disabled:opacity-50"
+                    className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-[11px] font-bold text-on-accent transition hover:bg-accent-strong disabled:opacity-50"
                   >
                     {isTogglingChat ? "Activando..." : "Activar el chat"}
                   </button>
                 </div>
               ) : (
                 <div className="text-center">
-                  <MessageSquare className="mx-auto mb-3 h-5 w-5 text-stone-600" />
-                  <p className="text-sm text-stone-400">
+                  <MessageSquare className="mx-auto mb-3 h-5 w-5 text-text-subtle" />
+                  <p className="text-sm text-muted">
                     Sin mensajes todavía.
                   </p>
-                  <p className="mt-1 text-[11px] text-stone-500">
+                  <p className="mt-1 text-[11px] text-text-subtle">
                     Aquí aparecen las conversaciones que abran tus pacientes
                     desde la app.
                   </p>
@@ -395,13 +395,13 @@ export default function ChatsPage() {
                 type="button"
                 data-conversation={conversation.id}
                 onClick={() => void openConversation(conversation.id)}
-                className={`flex w-full items-start gap-3 border-b border-stone-800/60 px-4 py-3 text-left transition hover:bg-stone-900/60 ${
-                  selectedId === conversation.id ? "bg-stone-900/80" : ""
+                className={`flex w-full items-start gap-3 border-b border-line/60 px-4 py-3 text-left transition hover:bg-surface/60 ${
+                  selectedId === conversation.id ? "bg-surface/80" : ""
                 }`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-semibold text-white">
+                    <span className="truncate text-xs font-semibold text-foreground">
                       {conversation.patient.fullName}
                     </span>
 
@@ -410,7 +410,7 @@ export default function ChatsPage() {
                     {conversation.unread > 0 ? (
                       <span
                         data-unread={conversation.unread}
-                        className="shrink-0 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-black"
+                        className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-on-accent"
                       >
                         {conversation.unread}
                       </span>
@@ -418,7 +418,7 @@ export default function ChatsPage() {
                   </div>
 
                   {conversation.lastMessage ? (
-                    <p className="mt-0.5 truncate text-[11px] text-stone-400">
+                    <p className="mt-0.5 truncate text-[11px] text-muted">
                       {conversation.lastMessage.sender === "staff" ? "Tú: " : ""}
                       {conversation.lastMessage.body}
                     </p>
@@ -438,31 +438,31 @@ export default function ChatsPage() {
       >
         {!selectedId ? (
           <div className="flex h-full items-center justify-center px-6 text-center">
-            <p className="text-sm text-stone-500">
+            <p className="text-sm text-text-subtle">
               Elige una conversación para leerla.
             </p>
           </div>
         ) : (
           <>
-            <header className="flex items-center gap-3 border-b border-stone-800 px-4 py-3">
+            <header className="flex items-center gap-3 border-b border-line px-4 py-3">
               {/* Volver a la lista: solo en movil, donde la lista esta oculta. */}
               <button
                 type="button"
                 onClick={() => setSelectedId(null)}
-                className="rounded-md p-1.5 text-stone-400 transition hover:bg-stone-800 hover:text-white md:hidden"
+                className="rounded-md p-1.5 text-muted transition hover:bg-surface-raised hover:text-foreground md:hidden"
                 aria-label="Volver a la lista"
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
 
-              <span className="truncate text-sm font-semibold text-white">
+              <span className="truncate text-sm font-semibold text-foreground">
                 {patientName}
               </span>
             </header>
 
             <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
               {isLoadingThread ? (
-                <p className="animate-pulse text-sm text-stone-400">
+                <p className="animate-pulse text-sm text-muted">
                   Cargando conversación...
                 </p>
               ) : (
@@ -472,7 +472,7 @@ export default function ChatsPage() {
               )}
             </div>
 
-            <div className="border-t border-stone-800 p-3">
+            <div className="border-t border-line p-3">
               <div className="flex items-end gap-2">
                 <textarea
                   data-reply-input="true"
@@ -488,7 +488,7 @@ export default function ChatsPage() {
                   }}
                   rows={1}
                   placeholder="Escribe una respuesta..."
-                  className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-stone-800 bg-stone-950 px-3 py-3 text-sm text-white placeholder-stone-600 outline-none focus:border-amber-400"
+                  className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-line bg-background px-3 py-3 text-sm text-foreground placeholder-text-subtle outline-none focus:border-accent"
                 />
 
                 <button
@@ -496,7 +496,7 @@ export default function ChatsPage() {
                   data-send-reply="true"
                   onClick={() => void handleSend()}
                   disabled={!draft.trim() || isSending}
-                  className="flex h-11 items-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-xs font-bold text-on-accent transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send className="h-3.5 w-3.5" />
                   {isSending ? "Enviando..." : "Enviar"}
@@ -508,7 +508,7 @@ export default function ChatsPage() {
                 El negocio SI puede responder fuera de plazo, pero conviene
                 saber que el paciente podria no leerlo si su ventana cerro.
               */}
-              <p className="mt-2 text-[11px] text-stone-500">
+              <p className="mt-2 text-[11px] text-text-subtle">
                 Puedes responder siempre. El paciente puede escribirte hasta 24
                 horas después de su visita.
               </p>
@@ -550,8 +550,8 @@ function Bubble({ message }: { message: InboxMessage }) {
       <div
         className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 ${
           isStaff
-            ? "bg-amber-400 text-black"
-            : "border border-stone-800 bg-stone-900 text-stone-100"
+            ? "bg-accent text-on-accent"
+            : "border border-line bg-surface text-foreground"
         }`}
       >
         <p className="whitespace-pre-wrap break-words text-sm">
@@ -559,7 +559,7 @@ function Bubble({ message }: { message: InboxMessage }) {
         </p>
         <p
           className={`mt-1 text-[10px] ${
-            isStaff ? "text-black/60" : "text-stone-500"
+            isStaff ? "text-on-accent/60" : "text-text-subtle"
           }`}
         >
           {time}

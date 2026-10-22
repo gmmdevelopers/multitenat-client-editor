@@ -17,6 +17,11 @@ export const AdminRole = {
   owner: "owner",
   admin: "admin",
   receptionist: "receptionist",
+  /**
+   * Presta el servicio. **No entra al panel web**: su herramienta es la app
+   * movil (agenda propia, horarios y chat). Ver `lib/role-routing.ts`.
+   */
+  professional: "professional",
 } as const;
 
 export type AdminRole = (typeof AdminRole)[keyof typeof AdminRole];

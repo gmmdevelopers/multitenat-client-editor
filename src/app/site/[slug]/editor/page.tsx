@@ -17,6 +17,7 @@ import {
 } from "@/lib/editor-registry";
 import { TemplateGallery } from "@/components/editor/TemplateGallery";
 import { PalettePanel } from "@/components/editor/PalettePanel";
+import { SeoTagsPanel } from "@/components/editor/SeoTagsPanel";
 import { UtilitiesPanel } from "@/components/editor/UtilitiesPanel";
 import type { ComponentRegistryEntry } from "@multitenant/design-system";
 import { useAuth } from "@/context/AuthContext";
@@ -142,8 +143,20 @@ export default function PageBuilderPage() {
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [activeTab, setActiveTab] = useState<OrganismTab>("all");
   const [sidebarMode, setSidebarMode] = useState<
-    "pages" | "sections" | "templates" | "palette" | "utilities"
+    "pages" | "sections" | "templates" | "palette" | "utilities" | "seo"
   >("sections");
+
+  /**
+   * Etiquetas SEO de la pagina abierta.
+   *
+   * Viven en el editor y no en el store de bloques: son un dato de la PAGINA, no
+   * del lienzo, y no deben entrar en el historial de deshacer (deshacer un
+   * cambio de color no tiene por que quitar una etiqueta).
+   */
+  const [seoTags, setSeoTags] = useState<string[]>([]);
+  /** Titulo y descripcion SEO de la pagina abierta. */
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDescription, setSeoDescription] = useState("");
 
   // El plan del tenant decide si aparecen las capacidades premium
   // (el ecommerce es plan pro). Si no viene, asumimos producto base.
@@ -201,6 +214,27 @@ export default function PageBuilderPage() {
 
     let cancelled = false;
 
+    /**
+     * Al cambiar de pagina, se SUELTA la seleccion.
+     *
+     * ## El fallo (5.7)
+     *
+     * `selectedBlockId` vive en el store y **sobrevive** al cambio de pagina: no
+     * pertenece a ninguna pagina en concreto. Al abrir otra desde el listado, el
+     * lienzo ya no contiene ese bloque —`selectedBlock` queda `undefined`— pero
+     * el id seguia marcado.
+     *
+     * El resultado es el sintoma que se reporto: la URL cambia, la pagina nueva
+     * se carga... y el editor **parece** no haber navegado, porque se queda sin
+     * panel de propiedades y sin el bloque enfocado, como si no hubiera nada
+     * seleccionado que explicara lo que se ve.
+     *
+     * Se limpia ANTES de pedir la pagina, no despues: si se dejara hasta que
+     * llegaran los bloques, durante la carga convivirian la seleccion vieja y los
+     * bloques nuevos.
+     */
+    setSelectedBlockId(null);
+
     // Rehidratamos ANTES de pedir la pagina a la API. Si se rehidrata despues,
     // localStorage restaura los bloques viejos y pisa los recien cargados
     // (era el bug de "aplico una plantilla y desaparece").
@@ -224,6 +258,10 @@ export default function PageBuilderPage() {
         setActiveSiteId(page.siteId ?? null);
         setPageTitle(page.title);
         setPagePath(page.path);
+        // Etiquetas SEO de ESTA pagina (vacio si nunca se editaron).
+        setSeoTags(page.seoTags ?? []);
+        setSeoTitle(page.seoTitle ?? "");
+        setSeoDescription(page.seoDescripcion ?? "");
         setHasUnpublished(page.hasUnpublishedChanges);
 
         // Estado del SITIO, que es lo que decide si la web responde o da 404.
@@ -258,7 +296,7 @@ export default function PageBuilderPage() {
     return () => {
       cancelled = true;
     };
-  }, [pageId, router, loadBlocks, toast]);
+  }, [pageId, router, loadBlocks, setSelectedBlockId, toast]);
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
 
@@ -700,65 +738,108 @@ export default function PageBuilderPage() {
         */}
         <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-stone-800 bg-stone-900/50">
           {/* Tabs de modo. Van fijos arriba, fuera de cualquier area scrolleable. */}
-          <div className="shrink-0 p-4 pb-3">
-            <div className="flex rounded-xl bg-stone-950/60 p-1">
-              <button
-                type="button"
-                onClick={() => setSidebarMode("pages")}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                  sidebarMode === "pages"
-                    ? "bg-stone-800 text-white"
-                    : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Páginas
-              </button>
-              <button
-                type="button"
-                onClick={() => setSidebarMode("sections")}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                  sidebarMode === "sections"
-                    ? "bg-stone-800 text-white"
-                    : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Secciones
-              </button>
-              <button
-                type="button"
-                onClick={() => setSidebarMode("templates")}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                  sidebarMode === "templates"
-                    ? "bg-amber-400 text-black"
-                    : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Templates
-              </button>
-              <button
-                type="button"
-                data-sidebar-mode="palette"
-                onClick={() => setSidebarMode("palette")}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                  sidebarMode === "palette"
-                    ? "bg-amber-400 text-black"
-                    : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Paleta
-              </button>
-              <button
-                type="button"
-                data-sidebar-mode="utilities"
-                onClick={() => setSidebarMode("utilities")}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
-                  sidebarMode === "utilities"
-                    ? "bg-amber-400 text-black"
-                    : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Utilidades
-              </button>
+          <div className="shrink-0 px-4 pb-3 pt-4">
+            {/*
+              Dos grupos y no seis tabs en fila.
+
+              ## Por que (antes se cortaba "Utilidades" y no se veia "SEO")
+
+              El sidebar mide 288 px y habia **seis** tabs con `flex-1` en una sola
+              fila: `Páginas + Secciones + Templates + Paleta + Utilidades + SEO`
+              no cabe. Como el `aside` tiene `overflow-hidden`, lo que sobraba se
+              recortaba en lugar de verse.
+
+              Encoger la letra habria cabido, pero mal: son **dos cosas distintas**
+              mezcladas.
+
+              | Grupo | Que hace |
+              |---|---|
+              | **Contenido** | Que editas: páginas, secciones, templates |
+              | **Apariencia** | Como lo ajustas: paleta, utilidades, SEO |
+
+              Al separarlos, cada grupo cabe en una fila sin apretarse y se
+              entiende de un vistazo para que sirve cada boton.
+            */}
+            <div className="flex flex-col gap-2">
+              {/* --- Grupo 1: contenido --- */}
+              <div className="flex rounded-xl bg-stone-950/60 p-1">
+                <button
+                  type="button"
+                  data-sidebar-mode="pages"
+                  onClick={() => setSidebarMode("pages")}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                    sidebarMode === "pages"
+                      ? "bg-stone-800 text-white"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  Páginas
+                </button>
+                <button
+                  type="button"
+                  data-sidebar-mode="sections"
+                  onClick={() => setSidebarMode("sections")}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                    sidebarMode === "sections"
+                      ? "bg-stone-800 text-white"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  Secciones
+                </button>
+                <button
+                  type="button"
+                  data-sidebar-mode="templates"
+                  onClick={() => setSidebarMode("templates")}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                    sidebarMode === "templates"
+                      ? "bg-amber-400 text-black"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  Templates
+                </button>
+              </div>
+
+              {/* --- Grupo 2: apariencia y ajustes --- */}
+              <div className="flex rounded-xl bg-stone-950/60 p-1">
+                <button
+                  type="button"
+                  data-sidebar-mode="palette"
+                  onClick={() => setSidebarMode("palette")}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                    sidebarMode === "palette"
+                      ? "bg-amber-400 text-black"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  Paleta
+                </button>
+                <button
+                  type="button"
+                  data-sidebar-mode="utilities"
+                  onClick={() => setSidebarMode("utilities")}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                    sidebarMode === "utilities"
+                      ? "bg-amber-400 text-black"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  Utilidades
+                </button>
+                <button
+                  type="button"
+                  data-sidebar-mode="seo"
+                  onClick={() => setSidebarMode("seo")}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${
+                    sidebarMode === "seo"
+                      ? "bg-amber-400 text-black"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                >
+                  SEO
+                </button>
+              </div>
             </div>
           </div>
 
@@ -848,6 +929,16 @@ export default function PageBuilderPage() {
                 onSaved={handlePaletteSaved}
               />
             </div>
+          ) : sidebarMode === "seo" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              <SeoTagsPanel
+                pageId={pageId ?? ""}
+                initialTags={seoTags}
+                initialTitle={seoTitle}
+                initialDescription={seoDescription}
+                onSaved={() => setHasUnpublished(true)}
+              />
+            </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
               <UtilitiesPanel
@@ -864,6 +955,7 @@ export default function PageBuilderPage() {
         {/* Canvas Central */}
         <Canvas
           blocks={blocks}
+          pageId={pageId}
           selectedBlockId={selectedBlockId}
           viewportMode={viewportMode}
           zoom={zoom}

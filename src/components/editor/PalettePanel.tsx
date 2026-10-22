@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Palette, RotateCcw, Search } from "lucide-react";
 import {
   PALETTE_KEYS,
@@ -38,7 +38,12 @@ const STRIP_ORDER: Array<keyof CustomPalette> = [
 
 interface PalettePanelProps {
   siteId: string | null;
-  /** Paleta guardada en el sitio. `null` = la del vertical. */
+  /**
+   * Paleta guardada en el sitio. `null` = la del vertical.
+   *
+   * Va como `unknown` porque la prop la pasa el editor sin tipar; se estrecha
+   * abajo con `as` y se valida con `isCustomPalette` antes de usarla.
+   */
   palette: unknown;
   siteType?: string;
   /**
@@ -60,16 +65,71 @@ export function PalettePanel({
   onSaved,
 }: PalettePanelProps) {
   const toast = useToast();
+
+  /**
+   * La paleta, ya estrechada a su tipo real.
+   *
+   * A partir de aqui todas las comparaciones y los usos son sobre `current`:
+   * TS no propaga el estrechamiento de una prop a las funciones declaradas mas
+   * abajo, asi que dentro de `handleSave` volveria a ser `unknown`.
+   */
+  const current = palette as CustomPalette | null;
   const [query, setQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Lo que hay GUARDADO en el sitio, para saber si hay cambios pendientes.
-  const savedPalette = useMemo(
-    () => (isCustomPalette(palette) ? palette : null),
-    [palette],
+  /**
+   * La paleta GUARDADA, segun la ultima respuesta del servidor.
+   *
+   * ## Por que una copia y no la prop
+   *
+   * La prop cambia con cada seleccion (el editor la actualiza para pintar el
+   * canvas al instante). Si se comparara contra ella, `hasChanges` daria
+   * **siempre `false`**: la prop nueva contra si misma. El boton de guardar
+   * nacia deshabilitado y la eleccion **nunca se persistia** — se veia en el
+   * lienzo y desaparecia al recargar.
+   *
+   * Se sincroniza cuando la prop cambia por algo que **no** fue una seleccion
+   * de este panel (recarga tras guardar), y al montar con lo que ya habia.
+   */
+  const [savedPalette, setSavedPalette] = useState<CustomPalette | null>(() =>
+    isCustomPalette(current) ? current : null,
   );
 
-  const hasChanges = JSON.stringify(palette) !== JSON.stringify(savedPalette);
+  /**
+   * La ultima paleta que ESTE panel aplico al lienzo.
+   *
+   * ## Por que hace falta distinguir el origen
+   *
+   * La prop cambia por dos motivos muy distintos:
+   *
+   *   1. **El cliente eligio aqui**: `onPreview` actualizo el estado del editor,
+   *      y la prop bajo de vuelta. Eso **no** es un guardado.
+   *   2. **Llego del servidor**: carga inicial o recarga tras guardar. Eso **si**
+   *      es la verdad guardada.
+   *
+   * Sin esta distincion no hay forma de saberlo: un `useEffect` sobre la prop
+   * marcaria como guardada cada seleccion, y volveriamos al fallo de que el
+   * boton nunca detecta cambios.
+   */
+  const lastPreviewed = useRef<CustomPalette | null>(null);
+
+  useEffect(() => {
+    /**
+     * Si el cambio lo provoco este panel, se ignora: no viene del servidor.
+     *
+     * La comparacion es por valor y no por identidad: el editor puede reenviar
+     * un objeto nuevo con los mismos colores, y eso no es un guardado.
+     */
+    if (
+      JSON.stringify(current ?? null) === JSON.stringify(lastPreviewed.current)
+    ) {
+      return;
+    }
+
+    setSavedPalette(isCustomPalette(current) ? current : null);
+  }, [current]);
+
+  const hasChanges = JSON.stringify(current) !== JSON.stringify(savedPalette);
 
   /**
    * Presets disponibles.
@@ -98,6 +158,10 @@ export function PalettePanel({
 
   /** Selecciona y previsualiza. `null` = volver a la del vertical. */
   function handleSelect(next: CustomPalette | null) {
+    // Se anota ANTES de avisar: el editor devuelve la prop y el efecto de
+    // sincronizacion la ignorara, porque este cambio no viene del servidor.
+    lastPreviewed.current = next;
+
     onPreview(next);
   }
 
@@ -109,9 +173,23 @@ export function PalettePanel({
 
     setIsSaving(true);
     try {
-      await updateSite(siteId, { settings: { palette } });
+      await updateSite(siteId, { settings: { palette: current } });
+
+      /**
+       * Se marca como guardada **en el momento** y no se espera al prop.
+       *
+       * El editor recarga tras guardar (`onSaved`), y hasta que esa respuesta no
+       * llegue la prop trae el valor viejo: sin esta linea, el boton seguiria
+       * diciendo "cambios sin guardar" durante un instante y se podia volver a
+       * pulsar.
+       */
+      setSavedPalette(isCustomPalette(current) ? current : null);
+
+      // El valor ya esta guardado: la proxima vuelta de la prop no es un cambio.
+      lastPreviewed.current = current;
+
       toast.success(
-        palette ? "Paleta guardada" : "Volviste a la paleta original",
+        current ? "Paleta guardada" : "Volviste a la paleta original",
       );
       onSaved();
     } catch (err) {
@@ -123,10 +201,16 @@ export function PalettePanel({
 
   /** Contraste minimo del par texto/fondo, para avisar de una paleta ilegible. */
   const worstContrast = useMemo(() => {
-    const current = savedPalette;
-    if (!current) return null;
-    return contrastRatio(current.text, current.background);
-  }, [savedPalette]);
+    /**
+     * Se mide la paleta **elegida**, no la guardada.
+     *
+     * El aviso sirve para decidir si se guarda o no: apuntando a la guardada,
+     * solo avisaria del problema *despues* de haberlo grabado, que es tarde.
+     */
+    const active = current;
+    if (!active) return null;
+    return contrastRatio(active.text, active.background);
+  }, [current]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -152,11 +236,11 @@ export function PalettePanel({
         {filtered.map((option) => {
           const isActive =
             option.palette === null
-              ? palette === null
-              : palette !== null &&
-                isCustomPalette(palette) &&
+              ? current === null
+              : current !== null &&
+                isCustomPalette(current) &&
                 PALETTE_KEYS.every(
-                  (key) => palette[key] === option.palette![key],
+                  (key) => current[key] === option.palette![key],
                 );
 
           return (
@@ -179,7 +263,8 @@ export function PalettePanel({
       </div>
 
       {/* Contraste: se informa del par que mas se rompe, con el valor real
-          calculado sobre la paleta guardada, no una promesa de legibilidad. */}
+          calculado sobre la paleta ELEGIDA (no la guardada), para poder decidir
+          antes de guardar. */}
       {worstContrast !== null ? (
         <p className="text-[10px] text-stone-500">
           Contraste texto/fondo:{" "}
@@ -195,7 +280,7 @@ export function PalettePanel({
       ) : null}
 
       <div className="flex items-center justify-between gap-2">
-        {palette !== null ? (
+        {current !== null ? (
           <button
             type="button"
             onClick={() => handleSelect(null)}

@@ -35,7 +35,9 @@ export interface BusinessHoursResponse {
 
 /** Los 7 dias del horario del negocio. */
 export async function getBusinessHours(): Promise<BusinessHoursResponse> {
-  const { data } = await api.get<BusinessHoursResponse>("/schedule/business-hours");
+  const { data } = await api.get<BusinessHoursResponse>(
+    "/schedule/business-hours",
+  );
 
   return data;
 }
@@ -91,202 +93,119 @@ export const DAY_NAMES = [
  */
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 
-/* ------------------------------------------------------------------ *
- * Bloqueos de agenda (feriados, vacaciones, cierres)
- * ------------------------------------------------------------------ */
-
-/** Un bloqueo tal como lo devuelve el API. */
-export interface TimeOff {
-  id: string;
-  /** Nulo = bloquea TODO el negocio. */
-  professionalId: string | null;
-  /** Instante de inicio (ISO 8601, en UTC). */
-  startsAt: string;
-  endsAt: string;
-  /** Motivo visible en el calendario. Nulo si no se indico. */
-  reason: string | null;
-}
-
 /**
  * Zona horaria del negocio.
  *
- * Los bloqueos se guardan como instantes, pero el cliente piensa en DIAS de
- * calendario ("el 25 esta cerrado"). La conversion entre ambos depende de la
- * zona, y Chile cambia de horario dos veces al ano (UTC-4 en invierno, UTC-3 en
- * verano). Guardar `00:00Z` dejaria el feriado empezando a las 21:00 del dia
- * ANTERIOR en hora local.
+ * Se declara aqui y no se lee del sistema porque el panel lo abre alguien desde
+ * cualquier sitio: el dueño puede estar de viaje y el navegador estar en otra
+ * zona. Las fechas de la agenda son las del NEGOCIO, no las de quien mira.
  *
- * Se usa la zona real y no un offset fijo precisamente por eso: un `-03:00`
- * hardcodeado se rompe medio ano.
+ * El dia que haya clientes en otro pais, esto pasa a leerse del tenant.
  */
 export const BUSINESS_TIME_ZONE = "America/Santiago";
 
 /**
- * Offset de una zona, en minutos, para un instante dado.
+ * Convierte un instante ISO a la fecha LOCAL del negocio (`YYYY-MM-DD`).
  *
- * `Intl` con `timeZone` es la unica via sin dependencias que respeta el horario
- * de verano: `getTimezoneOffset()` del navegador devuelve el del USUARIO, no el
- * del negocio, y un cliente de viaje lo tendria mal.
+ * ## Por que no vale `toISOString().slice(0, 10)`
+ *
+ * Ese atajo usa la fecha en **UTC**. Un bloqueo que empieza a las 21:00 del 25 de
+ * diciembre en Chile (UTC-3) es `2026-12-26T00:00Z`: el panel lo mostraria el dia
+ * **26**, un dia tarde.
+ *
+ * `Intl.DateTimeFormat` con la zona del negocio da el dia que el cliente ve en su
+ * calendario, sin depender de la zona del navegador.
  */
-function timeZoneOffsetMinutes(timeZone: string, date: Date): number {
-  // `en-US` con `longOffset` da "GMT-03:00"; se parsea el offset de ahi.
-  const formatted = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    timeZoneName: "longOffset",
-  })
-    .formatToParts(date)
-    .find((part) => part.type === "timeZoneName")?.value;
-
-  // "GMT-03:00" | "GMT-3" | "GMT" (UTC).
-  const match = formatted?.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
-  if (!match) return 0;
-
-  const sign = match[1] === "-" ? -1 : 1;
-  const hours = Number(match[2]);
-  const minutes = Number(match[3] ?? 0);
-
-  return sign * (hours * 60 + minutes);
-}
-
-/**
- * Convierte `YYYY-MM-DD` + hora local de Chile a un instante UTC (ISO).
- *
- * El truco es iterar una vez: el offset depende del instante, y el instante
- * depende del offset. La estimacion se ancla al mediodia local y se corrige con
- * el offset real del instante resultante (ver el comentario dentro).
- *
- * Verificado con las fechas de borde de 2026, incluidos los dos cambios de
- * horario de verano, y con ida y vuelta
- * `instantToLocalDate(localDateToInstant(d))` === `d`.
- */
-export function localDateToInstant(
-  date: string,
-  time: "start" | "end",
-): string {
-  const [year, month, day] = date.split("-").map(Number);
-
-  // Hora local deseada: inicio = 00:00, fin = 23:59:59.999 del MISMO dia.
-  // La fecha se toma como UTC solo para CONSTRUIR el numero; el offset se
-  // aplica despues.
-  const target =
-    time === "start"
-      ? Date.UTC(year, month - 1, day, 0, 0, 0, 0)
-      : Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-
-  // PRIMERA estimacion ancorada al MEDIODIA local, no a la medianoche.
-  //
-  // La transicion de horario de verano en Chile es a medianoche (23:00 del
-  // sabado pasa a 00:00 del domingo). Estimando con la medianoche, en el dia del
-  // cambio ya estaria vigente el horario NUEVO y la correccion se aplicaba al
-  // reves: el 2026-09-06 caia en el DIA ANTERIOR (medido con una prueba).
-  // El mediodia queda lejos de la transicion y da un offset estable.
-  const offset = timeZoneOffsetMinutes(
-    BUSINESS_TIME_ZONE,
-    new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0)),
-  );
-
-  // `target` se construyo como si fuera UTC; para obtener el instante real hay
-  // que RESTAR el offset (Chile va por detras de UTC).
-  const corrected = new Date(target - offset * 60_000);
-
-  // Segunda pasada: si el offset cambio (borde de horario de verano), el
-  // instante corregido puede tener otro offset.
-  const secondOffset = timeZoneOffsetMinutes(BUSINESS_TIME_ZONE, corrected);
-  if (secondOffset !== offset) {
-    return new Date(target - secondOffset * 60_000).toISOString();
-  }
-
-  return corrected.toISOString();
-}
-
-/**
- * Convierte un instante UTC a `YYYY-MM-DD` en hora de Chile.
- *
- * Se usa para rellenar los formularios al EDITAR: mostrar la fecha en UTC daria
- * el dia anterior para cualquier bloqueo que empiece de noche.
- */
-export function instantToLocalDate(instant: string): string {
-  const date = new Date(instant);
-
-  // `en-CA` produce `YYYY-MM-DD`, que es justo el formato del `<input type="date">`.
-  return new Intl.DateTimeFormat("en-CA", {
+export function instantToLocalDate(iso: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: BUSINESS_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(date);
+  }).formatToParts(new Date(iso));
+
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 /**
- * Bloqueos vigentes o futuros.
+ * Convierte un dia de calendario (`YYYY-MM-DD`) al instante de su inicio o fin.
  *
- * El backend NO devuelve los pasados: filtrar por `endsAt >= ahora` es
- * deliberado, porque un historico de bloqueos vencidos solo estorba en esta
- * pantalla.
+ * `edge: "start"` da las 00:00:00 y `"end"` las 23:59:59.999, **en la zona del
+ * negocio**. Es lo que espera el backend: el primer y el ultimo dia del bloqueo
+ * entran enteros.
+ *
+ * Se construye a mano el desfase porque `new Date("2026-12-25")` se interpreta
+ * como UTC medianoche, que en Chile es el dia anterior a las 21:00.
  */
-export async function listTimeOff(): Promise<TimeOff[]> {
-  const { data } = await api.get<TimeOff[]>("/schedule/time-off");
+function localDayToInstant(date: string, edge: "start" | "end"): string {
+  const [year, month, day] = date.split("-").map(Number);
 
-  return data;
+  /**
+   * El desfase se calcula PARA ESA FECHA, no con un `-3` fijo.
+   *
+   * Chile cambia de horario dos veces al año (`-4` en verano austral, `-3` en
+   * invierno). Un valor fijo desplazaria una hora la mitad de las fechas.
+   *
+   * ## Como se obtiene
+   *
+   * Se toma el **mediodia UTC** de ese dia y se pregunta que hora marca el
+   * reloj del negocio para ese instante. El mediodia y no la medianoche: en los
+   * dias del cambio de horario, la medianoche no existe o se repite, y el calculo
+   * se volveria ambiguo.
+   *
+   * La diferencia entre las dos horas es el desfase del negocio respecto de UTC.
+   */
+  const noonUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  const businessTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(noonUtc);
+
+  const [bh, bm] = businessTime.split(":").map(Number);
+  const offsetMinutes = bh * 60 + bm - 12 * 60;
+
+  const base = Date.UTC(
+    year,
+    month - 1,
+    day,
+    edge === "start" ? 0 : 23,
+    edge === "start" ? 0 : 59,
+    edge === "start" ? 0 : 59,
+    edge === "start" ? 0 : 999,
+  );
+
+  /**
+   * `base` es la hora del negocio expresada como si fuera UTC. Para obtener el
+   * instante real hay que **restar** el desfase: las 00:00 en Santiago son las
+   * 03:00 UTC cuando el desfase es `-3`.
+   */
+  return new Date(base - offsetMinutes * 60_000).toISOString();
 }
 
-/**
- * Crea un bloqueo a partir de DIAS de calendario.
- *
- * Recibe `YYYY-MM-DD` (lo que da el `<input type="date">`) y hace la conversion
- * a instantes con la zona del NEGOCIO: del dia completo, de 00:00 a 23:59:59.
- * Sin esto, el feriado empezaria la vispera por la tarde.
- */
-export async function createTimeOff(payload: {
-  /** `YYYY-MM-DD`, primer dia bloqueado (inclusive). */
-  startsOn: string;
-  /** `YYYY-MM-DD`, ultimo dia bloqueado (inclusive). */
-  endsOn: string;
-  reason?: string;
-  /** Si se omite, bloquea TODO el negocio. */
-  professionalId?: string;
-}): Promise<TimeOff> {
-  const { data } = await api.post<TimeOff>("/schedule/time-off", {
-    startsAt: localDateToInstant(payload.startsOn, "start"),
-    endsAt: localDateToInstant(payload.endsOn, "end"),
-    reason: payload.reason,
-    professionalId: payload.professionalId,
-  });
+// ---------------------------------------------------------------------------
+// Horario por profesional
+// ---------------------------------------------------------------------------
 
-  return data;
-}
-
-/** Quita un bloqueo. La agenda vuelve a estar disponible en ese rango. */
-export async function removeTimeOff(id: string): Promise<void> {
-  await api.delete(`/schedule/time-off/${id}`);
-}
-
-/* ------------------------------------------------------------------ *
- * Horario propio de un profesional
- * ------------------------------------------------------------------ */
-
-/**
- * Un dia del horario de un profesional.
- *
- * La clave esta en `isCustom`:
- *
- *   - `isCustom: true`  -> el dia tiene horario PROPIO (una excepcion).
- *   - `isCustom: false` -> el dia HEREDA el horario del negocio, y las horas
- *     que llegan en esta respuesta son las heredadas.
- *
- * Es la distincion que hace la interfaz explicable: sin ella, el cliente veria
- * horas en un dia y no sabria si son suyas o del negocio.
- */
+/** Un dia del horario PROPIO de un profesional. */
 export interface ProfessionalScheduleDay {
   dayOfWeek: number;
-  /** Nombre del dia, ya resuelto por el backend. */
-  dayName: string;
-  /** `true` si el dia tiene horario propio y no hereda. */
+  /**
+   * `true` si el dia tiene horario propio (una excepcion).
+   *
+   * `false` = **hereda** el del negocio, y las horas que llegan son las
+   * heredadas. Sin esta distincion no se sabe si tocar el dia cambia solo a esta
+   * persona o si no hace falta.
+   */
   isCustom: boolean;
   isClosed: boolean;
   opensAt: string | null;
   closesAt: string | null;
-  /** Descanso en `HH:mm`. Nulo si no tiene. */
   breakStartsAt: string | null;
   breakEndsAt: string | null;
 }
@@ -298,7 +217,7 @@ export interface ProfessionalScheduleResponse {
   days: ProfessionalScheduleDay[];
 }
 
-/** Horario de un profesional, con la herencia ya resuelta por el backend. */
+/** El horario de un profesional, con la herencia ya resuelta. */
 export async function getProfessionalSchedule(
   professionalId: string,
 ): Promise<ProfessionalScheduleResponse> {
@@ -309,6 +228,7 @@ export async function getProfessionalSchedule(
   return data;
 }
 
+/** Un dia que se envia al guardar el horario de un profesional. */
 export interface ProfessionalScheduleEntry {
   dayOfWeek: number;
   opensAt: string;
@@ -321,9 +241,9 @@ export interface ProfessionalScheduleEntry {
 /**
  * Guarda el horario propio de un profesional.
  *
- * IMPORTANTE: los dias que NO se envien se BORRAN y vuelven a heredar el del
- * negocio. Es lo que el cliente espera al quitar la excepcion de un dia, pero
- * significa que enviar la lista vacia borra TODAS sus excepciones.
+ * Los dias que **no** se envian se borran: ese dia vuelve a heredar el horario
+ * del negocio. Es lo que se espera al quitar una fila, pero significa que una
+ * lista vacia borra todas las excepciones de esa persona.
  */
 export async function updateProfessionalSchedule(
   professionalId: string,
@@ -336,40 +256,100 @@ export async function updateProfessionalSchedule(
 
   return data;
 }
-/* ------------------------------------------------------------------ *
- * Feriados nacionales (sugerencias)
- * ------------------------------------------------------------------ */
 
-/** Un feriado nacional, tal como lo devuelve nuestro backend. */
+// ---------------------------------------------------------------------------
+// Bloqueos de agenda
+// ---------------------------------------------------------------------------
+
+/** Un bloqueo: feriado, vacaciones o un cierre puntual. */
+export interface TimeOff {
+  id: string;
+  /** Inicio del bloqueo (ISO 8601). */
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+  /** `null` = bloquea **todo** el negocio. */
+  professionalId: string | null;
+}
+
+/**
+ * Los bloqueos vigentes o futuros.
+ *
+ * El backend no devuelve los pasados: un historico de bloqueos vencidos solo
+ * estorba al organizar la agenda.
+ *
+ * Con `professionalId` se suman los suyos a los del negocio (un feriado afecta a
+ * todos). Sin el, solo los del negocio.
+ */
+export async function listTimeOff(professionalId?: string): Promise<TimeOff[]> {
+  const params = professionalId ? { professionalId } : undefined;
+
+  const { data } = await api.get<TimeOff[]>("/schedule/time-off", { params });
+
+  return data;
+}
+
+/**
+ * Crea un bloqueo a partir de **dias de calendario**.
+ *
+ * Se reciben `YYYY-MM-DD` y no instantes porque es lo que elige el cliente ("del
+ * 25 al 26"). La conversion a instantes la hace `localDayToInstant`, con la zona
+ * del negocio, y el ultimo dia entra entero.
+ */
+export async function createTimeOff(payload: {
+  /** `YYYY-MM-DD`, primer dia bloqueado (inclusive). */
+  startsOn: string;
+  /** `YYYY-MM-DD`, ultimo dia bloqueado (inclusive). */
+  endsOn: string;
+  reason?: string;
+  /** Si se omite, bloquea **todo** el negocio. */
+  professionalId?: string;
+}): Promise<TimeOff> {
+  const { data } = await api.post<TimeOff>("/schedule/time-off", {
+    startsAt: localDayToInstant(payload.startsOn, "start"),
+    endsAt: localDayToInstant(payload.endsOn, "end"),
+    // Sin motivo se manda `null` y no cadena vacia: una cadena vacia en la base
+    // parece rellena y no lo esta.
+    reason: payload.reason?.trim() || null,
+    ...(payload.professionalId
+      ? { professionalId: payload.professionalId }
+      : {}),
+  });
+
+  return data;
+}
+
+/** Quita un bloqueo: la agenda vuelve a estar disponible en ese rango. */
+export async function removeTimeOff(id: string): Promise<void> {
+  await api.delete(`/schedule/time-off/${id}`);
+}
+
+/** Un feriado nacional, como sugerencia para bloquear. */
 export interface Holiday {
   /** `YYYY-MM-DD`. */
   date: string;
   title: string;
-  /**
-   * `true` = irrenunciable (el comercio no puede abrir).
-   *
-   * Es informativo: puede ayudar a decidir, pero NO impide crear el bloqueo ni
-   * se aplica solo. Un negocio puede trabajar igual.
-   */
+  /** `true` = irrenunciable. Dato informativo: ayuda a decidir. */
   inalienable: boolean;
 }
 
 export interface HolidaysResponse {
   holidays: Holiday[];
   /**
-   * `false` si la fuente externa fallo y no hay datos.
+   * `false` si la fuente externa fallo.
    *
-   * La peticion sigue siendo 200: la pantalla debe ESCONDER el atajo de
-   * feriados, no mostrar un error. Los feriados son una comodidad, y bloquear
-   * la pantalla por un tercero caido seria peor que no ofrecerlos.
+   * La peticion sigue siendo exitosa a proposito: la pantalla debe **esconder**
+   * el atajo de feriados, no mostrar un error. Los feriados son una comodidad, y
+   * romper la pantalla por un tercero caido seria peor que no ofrecerlos.
    */
   available: boolean;
 }
 
 /**
- * Feriados nacionales del año en curso, para sugerir bloqueos.
+ * Feriados nacionales del año en curso, para **sugerir** bloqueos.
  *
- * NO crea nada: el cliente elige cuales quiere y se crean con `createTimeOff`.
+ * No crea nada: devuelve la lista para que el cliente elija. Aplicarlos solos
+ * cerraria la agenda de un negocio que si trabaja ese dia.
  */
 export async function listHolidays(): Promise<HolidaysResponse> {
   const { data } = await api.get<HolidaysResponse>("/schedule/holidays");

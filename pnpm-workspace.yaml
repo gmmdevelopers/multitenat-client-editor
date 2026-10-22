@@ -1,0 +1,35 @@
+# Aprobacion de builds en pnpm 11.
+#
+# pnpm 11 ya NO lee el campo "pnpm" de package.json: la configuracion vive
+# aqui. Ademas, onlyBuiltDependencies/neverBuiltDependencies/
+# ignoredBuiltDependencies se consolidaron en el mapa "allowBuilds".
+#
+# Solo listamos los paquetes cuyo install script es legitimo. Cualquier
+# dependencia futura que no este en la lista NO correra sus scripts: es el
+# comportamiento seguro por defecto.
+#
+# Nota: pnpm siembra este archivo con las dependencias que encuentra al
+# instalar, por eso "allowBuilds" suele venir con entradas ya escritas; en ese
+# caso CONSERVALAS y solo agrega las que falten.
+allowBuilds:
+  # Resolutor de imports nativo de unrs/eslint-config (via `next lint`). Solo
+  # compila su binding nativo; no corre nada arbitrario.
+  unrs-resolver: true
+  # Motor de build de Next.js: prepara su binario nativo.
+  esbuild: true
+
+# --- Design system: LOCAL en desarrollo, GitHub en produccion ---
+#
+# El editor declara `github:gmmdevelopers/multitenant-design-system#main` en su
+# package.json, y eso es lo que DEBE seguir viendo Docker: ese archivo no se
+# toca.
+#
+# Este override hace que pnpm resuelva el paquete desde `packages/design-system`
+# en local. Sin el, el editor usaria la copia de GitHub, que **va por detras**:
+# los organismos traian los colores incrustados como hex en vez de
+# `var(--site-accent)`, y cambiar la paleta no repintaba el lienzo.
+#
+# Tiene que estar en el workspace de CADA app y no solo en el de la raiz: las
+# apps se instalan aisladas y solo leen el suyo.
+overrides:
+  "@multitenant/design-system": "link:../packages/design-system"

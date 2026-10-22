@@ -48,7 +48,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-950 px-4 py-10">
+    <div className="flex min-h-screen justify-center bg-gray-950 px-4 py-4">
       {/* Resplandor decorativo: da profundidad sin cargar la pantalla. */}
       <div
         aria-hidden

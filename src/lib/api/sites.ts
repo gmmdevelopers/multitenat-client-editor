@@ -147,6 +147,37 @@ export async function requestCustomDomain(
   return data;
 }
 
+/**
+ * Conecta el dominio ya solicitado.
+ *
+ * ## Quien llama a esto
+ *
+ * En el flujo final lo hace la plataforma sola, cuando el DNS ya resuelve
+ * (`DOMINIO-PROPIO.md`, etapa 3). Hoy el boton es para el equipo: es el paso
+ * que antes se hacia editando el JSON a mano, y que ademas **no escribia la
+ * columna** que el resolver consulta.
+ *
+ * En `client-editor` no se expone al cliente final: cambiaria el estado de
+ * enrutado de su web sin que el DNS este listo.
+ */
+export async function activateCustomDomain(siteId: string): Promise<Site> {
+  const { data } = await api.post<Site>(
+    `/sites/${siteId}/custom-domain/activate`,
+  );
+  return data;
+}
+
+/**
+ * Desconecta el dominio propio.
+ *
+ * La web del cliente **no se cae**: sigue en su subdominio. Solo deja de
+ * resolverse por el dominio propio.
+ */
+export async function deactivateCustomDomain(siteId: string): Promise<Site> {
+  const { data } = await api.delete<Site>(`/sites/${siteId}/custom-domain`);
+  return data;
+}
+
 export interface PublicationSummary {
   totalPages: number;
   publishedPages: number;

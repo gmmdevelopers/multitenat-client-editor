@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BlockInstance } from "@/types/editor-state";
 import { ALL_BLOCKS_MAP } from "@/lib/editor-registry";
+import { blockAnchorHref } from "@/lib/anchor";
 import { useEditorStore } from "@/hooks/useEditorStore";
 import {
   Trash2,
@@ -398,7 +399,7 @@ export function PropertiesPanel({
                 const name =
                   ALL_BLOCKS_MAP.get(block.metaName)?.component?.displayName ||
                   block.metaName;
-                const anchor = `#${block.metaName.toLowerCase()}-${block.id.slice(0, 4)}`;
+                const anchor = blockAnchorHref(block);
                 return (
                   <option key={block.id} value={anchor}>
                     # {i + 1}. {name}

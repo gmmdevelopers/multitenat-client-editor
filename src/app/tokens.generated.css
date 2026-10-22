@@ -1,0 +1,81 @@
+/**
+ * GENERADO AUTOMATICAMENTE. NO EDITAR A MANO.
+ *
+ * Sale de `@multitenant/tokens` con:
+ *   node --experimental-strip-types scripts/generate-tokens.mjs
+ *
+ * Para cambiar un color, se cambia en el paquete y se regenera: asi la
+ * marca queda igual en el panel, el dashboard, la landing y la app.
+ */
+
+/*
+ * MODO CLARO: el que se aplica por defecto.
+ *
+ * El modo oscuro lo activa la clase `.dark` en el <html> (ver abajo), que
+ * pone el conmutador. Se usa una CLASE y no
+ * `@media (prefers-color-scheme: dark)` porque el usuario tiene que poder
+ * elegir: en un panel de trabajo, seguir al sistema no siempre es lo que
+ * quiere (muchos tienen el sistema en claro y prefieren el panel oscuro).
+ */
+:root {
+  --background: #F9FAFB;
+  --surface: #F3F4F6;
+  --surface-raised: #E5E7EB;
+  --surface-pressed: #D1D5DB;
+  --foreground: #111827;
+  --muted: #6B7280;
+  --text-subtle: #9CA3AF;
+  --on-accent: #111827;
+  --on-surface: #111827;
+  --accent: #F59E0B;
+  --accent-soft: #FEF3C7;
+  --accent-strong: #D97706;
+  --line: #E5E7EB;
+  --line-strong: #D1D5DB;
+  --danger: #DC2626;
+  --danger-soft: #FEF2F2;
+  --success: #059669;
+  --success-soft: #ECFDF5;
+  --info: #1D4ED8;
+  --info-soft: #DBEAFE;
+  --premium: #7E22CE;
+  --premium-soft: #F3E8FF;
+
+  /* Espaciado y radios: iguales en los dos modos. */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-xxl: 2rem;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+}
+
+/* MODO OSCURO: solo los colores cambian (las escalas son las mismas). */
+.dark {
+  --background: #030712;
+  --surface: #111827;
+  --surface-raised: #1F2937;
+  --surface-pressed: #374151;
+  --foreground: #F9FAFB;
+  --muted: #9CA3AF;
+  --text-subtle: #6B7280;
+  --on-accent: #111827;
+  --on-surface: #F9FAFB;
+  --accent: #FBBF24;
+  --accent-soft: #1F2937;
+  --accent-strong: #FCD34D;
+  --line: #1F2937;
+  --line-strong: #374151;
+  --danger: #DC2626;
+  --danger-soft: #1F2937;
+  --success: #059669;
+  --success-soft: #1F2937;
+  --info: #93C5FD;
+  --info-soft: #172554;
+  --premium: #D8B4FE;
+  --premium-soft: #3B0764;
+}

@@ -22,6 +22,27 @@ export interface DomainRequestSettings {
   notes?: string;
   requestedAt?: string;
   updatedAt?: string;
+  /**
+   * Los nameservers que el cliente debe poner en su registrador.
+   *
+   * Los asigna Cloudflare por dominio y cambian entre clientes: se muestran tal
+   * cual los devuelve la API, nunca se escriben a mano en la UI.
+   */
+  nameservers?: string[];
+  /**
+   * Motivo del rechazo, en lenguaje del cliente.
+   *
+   * Se pinta cuando `status === "rejected"`: sin el, el cliente ve "no pudimos
+   * conectarlo" y no tiene forma de saber que corregir.
+   */
+  error?: string;
+  /**
+   * Cuando Cloudflare confirmo que el nombre resuelve y hay certificado.
+   *
+   * No se expone el `zoneId` ni los `recordIds`: son detalle interno de la
+   * plataforma y no le sirven de nada al cliente.
+   */
+  verifiedAt?: string;
 }
 
 /**

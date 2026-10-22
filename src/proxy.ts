@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { resolveCustomDomainSlug } from "@/lib/custom-domain";
+
 /**
  * Separacion de dominios:
  *
@@ -34,7 +36,7 @@ const RESERVED_SLUGS = [
   "assets",
 ];
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hostname = (req.headers.get("host") || "").split(":")[0];
   const token = req.cookies.get("accessToken")?.value;
@@ -143,7 +145,39 @@ export function proxy(req: NextRequest) {
    */
   const slugFromHost = extractSlugFromHost();
 
-  const tenantSlug = slugFromHost ?? slugFromQuery ?? undefined;
+  /**
+   * Si el host no es un subdominio de la plataforma, se pregunta por DOMINIO PROPIO.
+   *
+   * ## Por que hace falta
+   *
+   * `extractSlugFromHost` solo entiende `.localhost` y `*.<APP_DOMAIN>`. Un
+   * dominio de cliente (`clinica.cl`) no es subdominio de la plataforma, asi que
+   * no devuelve nada. Sin esta consulta, la web publica de ese dominio daria
+   * **404 aunque el DNS y el certificado estuvieran perfectos**.
+   *
+   * ## Cuando NO se pregunta
+   *
+   * | Caso | Por que se salta |
+   * |---|---|
+   * | Ya resolvio el subdominio | Es un tenant de la plataforma |
+   * | Es el host del panel | `app.*`, `localhost`: ahi no vive ningun cliente |
+   * | Es una IP | La app movil llega por IP y el tenant viene por `?slug=` |
+   * | Llego `?slug=` | Ese es explicito y manda; preguntar seria una llamada inutil |
+   *
+   * La consulta la cachea `resolveCustomDomainSlug`, porque esto corre en cada
+   * request de cada visitante.
+   */
+  const canBeCustomDomain =
+    !slugFromHost &&
+    !slugFromQuery &&
+    !isAppHost &&
+    !/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+
+  const slugFromCustomDomain = canBeCustomDomain
+    ? await resolveCustomDomainSlug(hostname)
+    : null;
+
+  const tenantSlug = slugFromHost ?? slugFromCustomDomain ?? slugFromQuery ?? undefined;
 
   // Host desconocido (ni panel ni tenant): devolvemos 404 en vez de renderizar
   // un sitio vacio que confundiria al visitante.
@@ -204,6 +238,64 @@ export function proxy(req: NextRequest) {
   // Aqui no hay panel ni sesion: todo se renderiza como el sitio del cliente.
   // El tenant viaja en cookie porque en local el backend no siempre puede
   // resolverlo por subdominio.
+
+  /**
+   * Rutas de MAQUINA: no son paginas del sitio y no se reescriben.
+   *
+   * ## Por que (esto rompia `robots.txt` y `sitemap.xml`)
+   *
+   * El proxy reescribe **todo** `pathname` a `/publico/<slug>?path=<pathname>`.
+   * Sin esta lista, una peticion a `/robots.txt` se convertia en "la pagina
+   * `/robots.txt` del sitio", y como no existe, respondia **404**. Lo mismo con
+   * `/sitemap.xml`.
+   *
+   * Consecuencia: las dos cosas que mas importan para el SEO no se servian
+   * nunca. Y el sintoma era confuso, porque en el navegador se veia una pagina
+   * de 404 normal.
+   *
+   * Se dejan pasar tal cual: Next las resuelve en `app/robots.ts` y
+   * `app/sitemap.xml/route.ts`.
+   */
+  const MACHINE_ROUTES = ["/robots.txt", "/sitemap.xml", "/favicon.ico"];
+  if (
+    MACHINE_ROUTES.includes(pathname) ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/api/")
+  ) {
+    /**
+     * Se dejan pasar, pero con el tenant **en una cabecera**.
+     *
+     * ## Por que una cabecera y no `?slug=`
+     *
+     * El handler de `/sitemap.xml` necesita saber de que negocio son las
+     * paginas, y **no puede sacarlo del host**: el `Host` que ve es el de la
+     * peticion interna (el contenedor), no el subdominio original. El proxy si lo
+     * sabe, porque acaba de resolverlo arriba.
+     *
+     * Se probo primero reescribiendo a `/sitemap.xml?slug=...`, pero una
+     * reescritura **a la misma ruta** vuelve a pasar por el proxy y no llega al
+     * handler: la peticion se quedaba en un XML vacio sin ejecutar el codigo.
+     *
+     * Una cabecera evita la reescritura entera.
+     */
+    const requestHeaders = new Headers(req.headers);
+
+    if (tenantSlug) {
+      requestHeaders.set("x-tenant-slug", tenantSlug);
+    }
+
+    const passThrough = NextResponse.next({ request: { headers: requestHeaders } });
+
+    if (tenantSlug) {
+      passThrough.cookies.set("x-tenant-slug", tenantSlug, {
+        path: "/",
+        sameSite: "lax",
+      });
+    }
+
+    return passThrough;
+  }
+
   const response = NextResponse.next();
 
   if (tenantSlug) {

@@ -43,7 +43,7 @@ export default function ContactMessagesPage() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-xl border-red-500/40 bg-red-500/10 p-6 text-sm text-red-400">
+        <div className="max-w-md rounded-xl border-danger/40 bg-danger/10 p-6 text-sm text-danger">
           {error}
         </div>
       </div>
@@ -53,7 +53,7 @@ export default function ContactMessagesPage() {
   if (messages === null) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="animate-pulse text-sm text-stone-400">
+        <span className="animate-pulse text-sm text-muted">
           Cargando mensajes...
         </span>
       </div>
@@ -63,22 +63,22 @@ export default function ContactMessagesPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <header className="mb-8">
-        <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-          <Inbox className="h-5 w-5 text-amber-300" />
+        <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
+          <Inbox className="h-5 w-5 text-accent-strong" />
           Mensajes de contacto
         </h1>
-        <p className="mt-1 text-sm text-stone-400">
+        <p className="mt-1 text-sm text-muted">
           Lo que tus visitantes enviaron desde los formularios de tu web.
         </p>
       </header>
 
       {messages.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-800 p-10 text-center">
-          <Inbox className="mx-auto h-6 w-6 text-stone-600" />
-          <p className="mt-3 text-sm font-medium text-stone-300">
+        <div className="rounded-2xl border border-dashed border-line p-10 text-center">
+          <Inbox className="mx-auto h-6 w-6 text-text-subtle" />
+          <p className="mt-3 text-sm font-medium text-foreground">
             Todavía no has recibido mensajes
           </p>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-stone-500">
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-text-subtle">
             Cuando alguien rellene un formulario de tu web, aparecerá aquí.
           </p>
         </div>
@@ -109,20 +109,20 @@ function MessageCard({
   return (
     <article
       data-contact-message={message.id}
-      className="rounded-2xl border border-stone-800 bg-stone-950/60 p-5"
+      className="rounded-2xl border border-line bg-background/60 p-5"
     >
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-stone-800 pb-3">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-line pb-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-white">
+          <p className="text-xs font-semibold text-foreground">
             {message.pagePath ? (
-              <span className="font-mono text-stone-300">
+              <span className="font-mono text-foreground">
                 {message.pagePath}
               </span>
             ) : (
               "Formulario de contacto"
             )}
           </p>
-          <p className="mt-0.5 text-[11px] text-stone-500">
+          <p className="mt-0.5 text-[11px] text-text-subtle">
             {date.toLocaleString("es-CL", {
               dateStyle: "medium",
               timeStyle: "short",
@@ -133,12 +133,12 @@ function MessageCard({
         {/* Estado del aviso: es lo primero que el cliente necesita saber, porque
             un mensaje sin avisar es uno que probablemente no vio. */}
         {message.notified ? (
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-400">
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-1 text-[10px] font-bold uppercase text-success">
             <Check className="h-3 w-3" />
             Avisado
           </span>
         ) : (
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-300">
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent/15 px-2.5 py-1 text-[10px] font-bold uppercase text-accent-strong">
             <MailX className="h-3 w-3" />
             Sin avisar
           </span>
@@ -151,29 +151,29 @@ function MessageCard({
             key={`${field.label}-${index}`}
             className="grid gap-0.5 sm:grid-cols-[140px_1fr] sm:gap-3"
           >
-            <dt className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+            <dt className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
               {field.label}
             </dt>
-            <dd className="whitespace-pre-wrap text-sm text-stone-200">
+            <dd className="whitespace-pre-wrap text-sm text-foreground">
               {field.value || (
-                <span className="text-stone-600">— sin respuesta —</span>
+                <span className="text-text-subtle">— sin respuesta —</span>
               )}
             </dd>
           </div>
         ))}
       </dl>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-stone-800 pt-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
         {message.replyTo ? (
           <a
             href={`mailto:${message.replyTo}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3 py-1.5 text-[11px] font-bold text-black transition hover:bg-amber-300"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[11px] font-bold text-on-accent transition hover:bg-accent-strong"
           >
             <Mail className="h-3.5 w-3.5" />
             Responder a {message.replyTo}
           </a>
         ) : (
-          <span className="text-[11px] text-stone-500">
+          <span className="text-[11px] text-text-subtle">
             El visitante no dejó su correo, así que no se puede responder
             directamente.
           </span>
@@ -182,7 +182,7 @@ function MessageCard({
         {!message.notified ? (
           <Link
             href={settingsHref}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-300 hover:underline"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent-strong hover:underline"
           >
             <AlertCircle className="h-3.5 w-3.5" />
             Configurar correo de contacto

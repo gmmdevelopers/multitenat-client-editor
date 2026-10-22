@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { Clock, DollarSign, Pencil, Plus, Power, Tag, Users } from "lucide-react";
 
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
+import { canEditSection } from "@/lib/role-routing";
+import { ReadOnlyNotice } from "@/components/ReadOnlySection";
 import { getErrorMessage } from "@/lib/api/errors";
 import {
   createService,
@@ -43,6 +46,15 @@ function formatDuration(minutes: number): string {
  */
 export default function ServicesPage() {
   const toast = useToast();
+  const { user } = useAuth();
+
+  /**
+   * El rol decide entre mostrar los controles o el aviso de solo lectura.
+   *
+   * `owner` y `admin` editan; el `receptionist` solo consulta. Se calcula una
+   * vez aqui y no en cada boton, para que la regla viva en un solo sitio.
+   */
+  const canEdit = user ? canEditSection(user.role, "services") : false;
 
   const [services, setServices] = useState<Service[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +93,7 @@ export default function ServicesPage() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-md rounded-xl border-red-500/40 bg-red-500/10 p-6 text-sm text-red-400">
+        <div className="max-w-md rounded-xl border-danger/40 bg-danger/10 p-6 text-sm text-danger">
           {error}
         </div>
       </div>
@@ -92,43 +104,58 @@ export default function ServicesPage() {
     <div className="mx-auto max-w-4xl px-6 py-10">
       <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold text-white">
-            <Tag className="h-5 w-5 text-amber-300" />
+          <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
+            <Tag className="h-5 w-5 text-accent-strong" />
             Servicios
           </h1>
-          <p className="mt-1 text-sm text-stone-400">
+          <p className="mt-1 text-sm text-muted">
             Lo que ofreces, cuánto dura y cuánto cuesta. Cada cita se agenda con
             un servicio.
           </p>
         </div>
 
-        <button
-          type="button"
-          data-create-service="true"
-          onClick={() => setEditing("new")}
-          className="flex items-center gap-1.5 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Nuevo servicio
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            data-create-service="true"
+            onClick={() => setEditing("new")}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo servicio
+          </button>
+        ) : null}
       </header>
+
+      {/*
+        Aviso de solo lectura para quien no administra el negocio.
+
+        El recepcionista VE los servicios (los necesita para responder precios y
+        duraciones) pero no los edita: son del negocio. El aviso sustituye a los
+        botones de creacion, que le daran 403 en el backend.
+      */}
+      {canEdit ? null : (
+        <div className="mb-4">
+          <ReadOnlyNotice />
+        </div>
+      )}
 
       {/* Interruptor de inactivos: por defecto no se ven, porque un servicio
           inhabilitado solo interesa para entender citas pasadas. */}
-      <label className="mb-4 flex w-fit items-center gap-2 text-[11px] text-stone-400">
+      <label className="mb-4 flex w-fit items-center gap-2 text-[11px] text-muted">
         <input
           type="checkbox"
           data-show-inactive="true"
           checked={showInactive}
           onChange={(e) => setShowInactive(e.target.checked)}
-          className="h-3.5 w-3.5 rounded border-stone-700 bg-stone-800"
+          className="h-3.5 w-3.5 rounded border-line-strong bg-surface-raised"
         />
         Mostrar servicios inhabilitados
       </label>
 
       {services === null ? (
         <div className="flex justify-center py-16">
-          <span className="animate-pulse text-sm text-stone-400">
+          <span className="animate-pulse text-sm text-muted">
             Cargando servicios...
           </span>
         </div>
@@ -142,6 +169,8 @@ export default function ServicesPage() {
               service={service}
               onEdit={() => setEditing(service)}
               onDeactivate={() => setPendingDeactivate(service)}
+              // El recepcionista ve la tarjeta sin las acciones: son del negocio.
+              canEdit={canEdit}
             />
           ))}
         </div>
@@ -171,19 +200,19 @@ export default function ServicesPage() {
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="rounded-2xl border border-dashed border-stone-800 p-10 text-center">
-      <Tag className="mx-auto h-6 w-6 text-stone-600" />
-      <p className="mt-3 text-sm font-medium text-stone-300">
+    <div className="rounded-2xl border border-dashed border-line p-10 text-center">
+      <Tag className="mx-auto h-6 w-6 text-text-subtle" />
+      <p className="mt-3 text-sm font-medium text-foreground">
         Todavía no tienes servicios
       </p>
-      <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-stone-500">
+      <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-text-subtle">
         Un servicio define cuánto dura una cita. Sin servicios, la agenda no sabe
         cuándo termina cada reserva.
       </p>
       <button
         type="button"
         onClick={onCreate}
-        className="mt-4 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300"
+        className="mt-4 rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong"
       >
         Crear el primero
       </button>
@@ -195,10 +224,13 @@ function ServiceCard({
   service,
   onEdit,
   onDeactivate,
+  canEdit,
 }: {
   service: Service;
   onEdit: () => void;
   onDeactivate: () => void;
+  /** `false` = solo lectura: se ve la tarjeta, sin los botones de accion. */
+  canEdit: boolean;
 }) {
   const professionalCount = service._count?.professionals ?? 0;
   const isOrphan = professionalCount === 0;
@@ -208,8 +240,8 @@ function ServiceCard({
       data-service={service.id}
       className={`rounded-2xl border p-5 transition ${
         service.isActive
-          ? "border-stone-800 bg-stone-950/60"
-          : "border-stone-800/60 bg-stone-950/30 opacity-60"
+          ? "border-line bg-background/60"
+          : "border-line/60 bg-background/30 opacity-60"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -221,56 +253,64 @@ function ServiceCard({
           />
 
           <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm font-bold text-white">
+            <p className="flex items-center gap-2 text-sm font-bold text-foreground">
               <span className="truncate">{service.name}</span>
               {!service.isActive ? (
-                <span className="shrink-0 rounded bg-stone-800 px-1.5 py-0.5 text-[9px] uppercase text-stone-400">
+                <span className="shrink-0 rounded bg-surface-raised px-1.5 py-0.5 text-[9px] uppercase text-muted">
                   Inhabilitado
                 </span>
               ) : null}
             </p>
 
             {service.description ? (
-              <p className="mt-0.5 text-[11px] leading-relaxed text-stone-500">
+              <p className="mt-0.5 text-[11px] leading-relaxed text-text-subtle">
                 {service.description}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            data-edit-service={service.id}
-            onClick={onEdit}
-            title="Editar"
-            className="rounded-md p-1.5 text-stone-400 transition hover:bg-stone-800 hover:text-white"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+        {/*
+          Las acciones van JUNTAS y solo si el rol puede editar.
 
-          {service.isActive ? (
+          Se oculta el bloque entero y no cada boton: con uno solo escondido, el
+          contenedor quedaria con su `gap` y se veria un hueco raro.
+        */}
+        {canEdit ? (
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
-              data-deactivate-service={service.id}
-              onClick={onDeactivate}
-              title="Inhabilitar"
-              className="rounded-md p-1.5 text-stone-400 transition hover:bg-red-500/15 hover:text-red-400"
+              data-edit-service={service.id}
+              onClick={onEdit}
+              title="Editar"
+              className="rounded-md p-1.5 text-muted transition hover:bg-surface-raised hover:text-foreground"
             >
-              <Power className="h-3.5 w-3.5" />
+              <Pencil className="h-3.5 w-3.5" />
             </button>
-          ) : null}
-        </div>
+
+            {service.isActive ? (
+              <button
+                type="button"
+                data-deactivate-service={service.id}
+                onClick={onDeactivate}
+                title="Inhabilitar"
+                className="rounded-md p-1.5 text-muted transition hover:bg-danger/15 hover:text-danger"
+              >
+                <Power className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-stone-800 pt-3 text-[11px]">
-        <span className="flex items-center gap-1.5 text-stone-300">
-          <Clock className="h-3.5 w-3.5 text-stone-500" />
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-3 text-[11px]">
+        <span className="flex items-center gap-1.5 text-foreground">
+          <Clock className="h-3.5 w-3.5 text-text-subtle" />
           {formatDuration(service.durationInMinutes)}
         </span>
 
-        <span className="flex items-center gap-1.5 text-stone-300">
-          <DollarSign className="h-3.5 w-3.5 text-stone-500" />
+        <span className="flex items-center gap-1.5 text-foreground">
+          <DollarSign className="h-3.5 w-3.5 text-text-subtle" />
           {formatPrice(service.price)}
         </span>
 
@@ -278,7 +318,7 @@ function ServiceCard({
             se descubre al intentar reservar. */}
         <span
           className={`flex items-center gap-1.5 ${
-            isOrphan ? "text-amber-300" : "text-stone-400"
+            isOrphan ? "text-accent-strong" : "text-muted"
           }`}
         >
           <Users className="h-3.5 w-3.5" />
@@ -381,9 +421,9 @@ function ServiceModal({
       <form
         onSubmit={handleSubmit}
         data-service-modal="true"
-        className="w-full max-w-lg rounded-2xl border border-stone-800 bg-stone-900 p-6"
+        className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6"
       >
-        <h2 className="text-sm font-bold text-white">
+        <h2 className="text-sm font-bold text-foreground">
           {isEditing ? "Editar servicio" : "Nuevo servicio"}
         </h2>
 
@@ -447,9 +487,9 @@ function ServiceModal({
                 type="color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                className="h-9 w-12 cursor-pointer rounded-lg border border-stone-800 bg-stone-950"
+                className="h-9 w-12 cursor-pointer rounded-lg border border-line bg-background"
               />
-              <span className="font-mono text-[11px] text-stone-500">
+              <span className="font-mono text-[11px] text-text-subtle">
                 {color}
               </span>
             </span>
@@ -461,7 +501,7 @@ function ServiceModal({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-lg px-4 py-2 text-xs font-semibold text-stone-300 transition hover:bg-stone-800 disabled:opacity-40"
+            className="rounded-lg px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-raised disabled:opacity-40"
           >
             Cancelar
           </button>
@@ -470,7 +510,7 @@ function ServiceModal({
             type="submit"
             data-service-submit="true"
             disabled={!isValid || isSaving}
-            className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-accent px-4 py-2 text-xs font-bold text-on-accent transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isSaving ? "Guardando..." : isEditing ? "Guardar" : "Crear"}
           </button>
@@ -491,12 +531,12 @@ function ConfirmDeactivateModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-stone-800 bg-stone-900 p-6">
-        <h2 className="text-sm font-bold text-white">
+      <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6">
+        <h2 className="text-sm font-bold text-foreground">
           Inhabilitar «{service.name}»
         </h2>
 
-        <p className="mt-2 text-xs leading-relaxed text-stone-400">
+        <p className="mt-2 text-xs leading-relaxed text-muted">
           Dejará de ofrecerse en la agenda, pero <strong>no se borra</strong>: las
           citas que ya se agendaron con él conservan su historial. Puedes
           reactivarlo cuando quieras editándolo.
@@ -506,7 +546,7 @@ function ConfirmDeactivateModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-xs font-semibold text-stone-300 transition hover:bg-stone-800"
+            className="rounded-lg px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-raised"
           >
             Cancelar
           </button>
@@ -515,7 +555,7 @@ function ConfirmDeactivateModal({
             type="button"
             data-confirm-deactivate="true"
             onClick={onConfirm}
-            className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-500"
+            className="rounded-lg bg-danger px-4 py-2 text-xs font-bold text-foreground transition hover:bg-danger"
           >
             Sí, inhabilitar
           </button>
@@ -526,7 +566,7 @@ function ConfirmDeactivateModal({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-stone-800 bg-stone-950 px-3 py-2 text-sm text-stone-200 placeholder-stone-600 outline-none focus:border-amber-400";
+  "w-full rounded-lg border border-line bg-background px-3 py-2 text-sm text-foreground placeholder-text-subtle outline-none focus:border-accent";
 
 function Field({
   label,
@@ -539,11 +579,11 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
         {label}
       </span>
       {children}
-      {help ? <span className="text-[10px] text-stone-600">{help}</span> : null}
+      {help ? <span className="text-[10px] text-text-subtle">{help}</span> : null}
     </label>
   );
 }
