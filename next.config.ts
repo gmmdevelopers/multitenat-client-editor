@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import bundleAnalyzer from "@next/bundle-analyzer";
 import type { NextConfig } from "next";
 
 /**
@@ -90,4 +91,35 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@multitenant/design-system"],
 };
 
-export default nextConfig;
+/**
+ * Analisis del bundle, solo cuando se pide.
+ *
+ * ## Por que detras de una variable
+ *
+ * El analizador envuelve el build y abre un servidor para mirar el resultado. Si
+ * estuviera siempre activo, cada build de produccion pagaria ese coste (y en
+ * Coolify abriria un puerto que nadie mira).
+ *
+ * Se activa con `ANALYZE=true pnpm build`.
+ *
+ * ## Por que esto existe en este proyecto
+ *
+ * El punto 8.5 midio **2,6 MB de JS** en la web publica, casi todo en un solo
+ * chunk, y leer el codigo no alcanzo para explicar de donde salia: se probaron
+ * siete cambios de imports sin que el numero se moviese. El analizador da el
+ * arbol real de modulos, que es el dato que faltaba.
+ *
+ * Ver `MEDICION-BUNDLE.md`.
+ */
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+  /**
+   * HTML estatico en `.next/analyze/`, sin abrir navegador.
+   *
+   * En una sesion no interactiva, abrir una ventana no aporta nada: el reporte se
+   * lee del archivo.
+   */
+  openAnalyzer: false,
+});
+
+export default withBundleAnalyzer(nextConfig);

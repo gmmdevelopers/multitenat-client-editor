@@ -4,8 +4,7 @@ import type { ComponentType } from "react";
 
 import { BLOCK_METAS_BY_NAME } from "@multitenant/design-system";
 
-import { ALL_BLOCKS_MAP } from "@/lib/editor-registry";
-import { UTILITY_NAMES } from "@/lib/block-classification";
+import { ALL_BLOCKS_MAP, UTILITY_NAMES } from "@/lib/editor-registry";
 
 /**
  * Los componentes de las **utilidades**, y solo esos.
