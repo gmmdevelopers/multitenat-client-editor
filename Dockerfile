@@ -26,22 +26,32 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
       git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
     fi
 
-COPY package.json pnpm-lock.yaml ./
+# Solo el `package.json`.
+#
+# El `pnpm-lock.yaml` esta en `.dockerignore` porque lleva incrustado el override
+# de DESARROLLO del design system (`link:../packages/design-system`), y en Docker
+# esa carpeta no existe. Copiarlo aqui daria:
+#
+#     ERROR: failed to calculate checksum ... "/pnpm-lock.yaml": not found
+#
+# Sin lockfile, la version del design system la fija el `package.json`
+# (`github:gmmdevelopers/multitenant-design-system#main`).
+COPY package.json ./
 
 # ## La version de pnpm NO es un detalle
 #
-# Tiene que coincidir con la que genero el `pnpm-lock.yaml`. El lockfile guarda
-# el bloque `overrides` tal como lo ve esa version, y pnpm lo compara al instalar
-# con `--frozen-lockfile`:
+# Tiene que coincidir con la que genero el `pnpm-lock.yaml` en local, y con la
+# del `packageManager` del `package.json`: si no, el arbol de dependencias del
+# contenedor y el de la maquina de nadie coinciden, y el bug aparece solo en
+# produccion.
 #
-#     ERR_PNPM_LOCKFILE_CONFIG_MISMATCH
-#     The current "overrides" configuration doesn't match the value found in the lockfile
+# Antes aqui se activaba pnpm 9 y los archivos venian de pnpm 11.
+# `pnpm-workspace.yaml` usa `allowBuilds`, una clave que pnpm 9 no conoce (la suya
+# es `onlyBuiltDependencies`), y el `install` fallaba con
+# `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`.
 #
-# Con pnpm 9, ademas, `pnpm-workspace.yaml` usa `allowBuilds`, una clave que esa
-# version no conoce (la suya es `onlyBuiltDependencies`), asi que la lee como un
-# `overrides` distinto y el check falla.
-#
-# Al actualizar pnpm en local, actualiza esta linea tambien.
+# Al actualizar pnpm en local, actualiza esta linea y el `packageManager` del
+# `package.json`.
 RUN corepack enable && corepack prepare pnpm@11 --activate
 
 # ## Los tokens vienen de GitHub, no del monorepo
