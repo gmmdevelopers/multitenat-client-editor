@@ -14,8 +14,12 @@
  * Aqui se sirve lo correcto para **la web de un cliente**, que es lo que Google
  * tiene que indexar. El panel (`app.<dominio>`) no se bloquea desde este archivo
  * porque su proteccion real es la sesion: un `robots.txt` es una peticion, no un
- * control de acceso. Para pedirle a los buscadores que no lo indexen hay que
- * poner `X-Robots-Tag: noindex` en el proxy, donde el host **si** se conoce.
+ * control de acceso.
+ *
+ * **El panel se marca con `X-Robots-Tag: noindex, nofollow` en el proxy**
+ * (`proxy.ts`, bloque `isAppHost`), que es donde el host ya esta resuelto. Una
+ * cabecera viaja en cada respuesta y no depende de que el buscador haya leido
+ * este archivo antes.
  */
 
 /**

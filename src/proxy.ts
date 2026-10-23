@@ -50,10 +50,28 @@ export async function proxy(req: NextRequest) {
   // (`multitenant.com`) que enmascaraba el problema con un dominio equivocado.
   const isLocalhostRoot =
     hostname === "localhost" || hostname === "127.0.0.1";
+  const isLocalhostApp = hostname === "app.localhost";
+
+  /**
+   * `app.<APP_DOMAIN>` no entra aqui A PROPOSITO.
+   *
+   * ## Por que no vale `hostname.startsWith("app.")`
+   *
+   * Antes era asi, y trataba como panel **cualquier** dominio de cliente que
+   * empezara por `app.`: `app.clinica.cl` —un dominio perfectamente valido—
+   * recibia el flujo del panel, sin sesion mandaba a `/login` de la plataforma y
+   * su web publica nunca se servia. El cliente ponia los nameservers, esperaba
+   * 24 h, y su dominio no funcionaba sin ninguna pista de por que.
+   *
+   * Ahora se compara con el dominio de la plataforma de verdad. Si
+   * `NEXT_PUBLIC_APP_DOMAIN` no llega, solo `app.localhost` se considera panel:
+   * es mejor no reconocer el panel en un entorno mal configurado que comerse los
+   * dominios de los clientes.
+   */
   const isAppHost =
     isLocalhostRoot ||
-    hostname === "app.localhost" ||
-    hostname.startsWith(`${APP_SUBDOMAIN}.`);
+    isLocalhostApp ||
+    (Boolean(appDomain) && hostname === `${APP_SUBDOMAIN}.${appDomain}`);
 
   /**
    * Slug del tenant a partir del SUBDOMINIO (y solo del subdominio).
@@ -195,11 +213,39 @@ export async function proxy(req: NextRequest) {
 
   // --- PANEL (app.*) ---
   if (isAppHost) {
+    /**
+     * El panel NUNCA se indexa.
+     *
+     * ## Por que con una cabecera y no con `robots.txt`
+     *
+     * `robots.txt` es **una peticion mas**: solo lo respeta un buscador que lo
+     * pida primero, y no impide indexar una URL concreta que alguien enlace.
+     * `X-Robots-Tag: noindex` viaja con **cada respuesta**, asi que vale para
+     * cualquier pagina, aunque nadie haya leido el `robots.txt`.
+     *
+     * ## Por que aqui y no en la pagina
+     *
+     * En `app/robots.txt/route.ts` no se puede: esa ruta sirve lo de la **web
+     * del cliente**, y no sabe si el host es el panel. El proxy es el unico
+     * sitio donde `isAppHost` ya esta resuelto.
+     *
+     * ## La respuesta que se indexaba
+     *
+     * Sin esto, Google podia guardar `/login` (publica, sin sesion) y
+     * `/verify-email` como paginas del sitio, y ademas **redirects**: un 308
+     * conserva las cabeceras del destino. Por eso la marca va tambien en la
+     * redireccion al login, no solo en `next()`.
+     */
+    const noIndex = (response: NextResponse) => {
+      response.headers.set("X-Robots-Tag", "noindex, nofollow");
+      return response;
+    };
+
     // Sin sesion, cualquier ruta del panel manda al login.
     if (!token && !isAuthRoute && !isStandaloneRoute) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("from", pathname);
-      return NextResponse.redirect(loginUrl);
+      return noIndex(NextResponse.redirect(loginUrl));
     }
 
     // /login siempre se sirve, aunque haya token en la cookie.
@@ -212,7 +258,7 @@ export async function proxy(req: NextRequest) {
     // dispositivo donde el cliente no tiene sesion, y ahi la verificacion debe
     // funcionar igual. El token del enlace ES la credencial.
     if (isAuthRoute) {
-      return NextResponse.next();
+      return noIndex(NextResponse.next());
     }
 
     // El editor vive en /site/<slug>/editor, pero el panel es agnostico al
@@ -222,15 +268,15 @@ export async function proxy(req: NextRequest) {
       const slug = req.cookies.get("x-org-slug")?.value;
 
       if (slug) {
-        return NextResponse.rewrite(
-          new URL(`/site/${slug}${pathname}`, req.url),
+        return noIndex(
+          NextResponse.rewrite(new URL(`/site/${slug}${pathname}`, req.url)),
         );
       }
     }
 
     // `/` se deja pasar: la propia pagina resuelve el site del tenant y la
     // pagina home, y desde ahi redirige al editor con el `pageId` correcto.
-    return NextResponse.next();
+    return noIndex(NextResponse.next());
   }
 
   // --- WEB PUBLICA (tenant.*) ---

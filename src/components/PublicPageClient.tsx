@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { PageRenderer } from "@/components/PageRenderer";
@@ -93,10 +94,16 @@ function PaymentNotice({
  */
 export function PublicPageClient({
   blocks,
+  components,
+  defaultProps,
   pagePath,
   logoUrl,
 }: {
   blocks: BlockInstance[];
+  /** Los componentes de esta pagina, resueltos en el servidor (ver `page.tsx`). */
+  components: Record<string, ComponentType<any>>;
+  /** Los props por defecto de esos bloques, tambien resueltos en el servidor. */
+  defaultProps?: Record<string, Record<string, unknown>>;
   pagePath: string;
   logoUrl: string | null;
 }) {
@@ -151,6 +158,8 @@ export function PublicPageClient({
       */}
       <PageRenderer
         blocks={blocks}
+        components={components}
+        defaultProps={defaultProps}
         interactive
         pagePath={pagePath}
         logoUrl={logoUrl}

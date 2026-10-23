@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 
 import type { BlockInstance } from "@/types/editor-state";
+import { getDefaultPropsForOrganism } from "@/lib/editor-registry";
 
 /**
  * Los componentes que necesita una página, y solo esos.
@@ -56,6 +57,32 @@ export function resolvePageComponents(
     if (component) {
       resolved[name] = component;
     }
+  }
+
+  return resolved;
+}
+
+/**
+ * Los props por defecto de los bloques de esta pagina, resueltos **en el servidor**.
+ *
+ * ## Por que no los resuelve `PageRenderer`
+ *
+ * `getDefaultPropsForOrganism` vive en `editor-registry`, y ese modulo importa
+ * `getRegistryComponents()` del design system —el catalogo completo—. Llamarlo
+ * desde el cliente reintroduce justo el import que se acaba de sacar: el
+ * bundler lo ve y mete el registro entero en el bundle del visitante.
+ *
+ * Aqui solo se calculan los de **esta** pagina, y viajan como datos planos
+ * (objetos JSON), no como codigo.
+ */
+export function resolveDefaultProps(
+  blocks: BlockInstance[],
+): Record<string, Record<string, unknown>> {
+  const names = new Set(blocks.map((block) => block.metaName));
+  const resolved: Record<string, Record<string, unknown>> = {};
+
+  for (const name of names) {
+    resolved[name] = getDefaultPropsForOrganism(name);
   }
 
   return resolved;

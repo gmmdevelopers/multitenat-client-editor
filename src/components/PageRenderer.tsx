@@ -1,11 +1,9 @@
 "use client";
 
 import {
-  ALL_BLOCKS_MAP,
   HEADER_BLOCKS,
-  getDefaultPropsForOrganism,
   isUtilityBlock,
-} from "@/lib/editor-registry";
+} from "@/lib/block-metas";
 import { CONNECTED_ORGANISMS } from "@/components/editor/connected-organisms";
 import { UtilityLayer } from "@/components/editor/UtilityLayer";
 import { BlockInstance } from "@/types/editor-state";
@@ -39,6 +37,33 @@ interface PageRendererProps {
    * logo subido no aparece en la web y parece que la subida no sirvio.
    */
   logoUrl?: string | null;
+  /**
+   * Los componentes a pintar, resueltos por `metaName` **en el servidor**.
+   *
+   * ## Por que llegan por prop y no se buscan aqui
+   *
+   * Antes se resolvian contra `ALL_BLOCKS_MAP`, que importaba el
+   * `componentRegistry` completo del design system: **130 componentes, 50 de
+   * ellos plantillas de pagina entera** (`MedicalHomePage`, `SkincareServicesPage`
+   *...). Como el acceso es dinamico (`mapa[block.metaName]`), el bundler no
+   * podia descartar ninguno y **el visitante descargaba todo el catalogo del
+   * editor** para pintar tres secciones.
+   *
+   * Medido (2026-10-23): **1822 KB de JS** en la web publica, con **1196 KB en un
+   * solo chunk**.
+   *
+   * La solucion: el servidor ya sabe que bloques tiene la pagina (los acaba de
+   * leer de la API), asi que arma con ellos un objeto `metaName -> componente` y
+   * lo pasa aqui. Solo esos componentes entran en el grafo del navegador.
+   */
+  components: Record<string, import("react").ComponentType<any>>;
+  /**
+   * Los props por defecto de cada bloque, tambien resueltos en el servidor.
+   *
+   * Traerlos aqui obligaria a importar `editor-registry` en el cliente, que es
+   * justo lo que se acaba de sacar del bundle.
+   */
+  defaultProps?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -68,17 +93,18 @@ export function PageRenderer({
   interactive = false,
   pagePath,
   logoUrl,
+  components,
+  defaultProps = {},
 }: PageRendererProps) {
   // Se excluyen las utilidades del FLUJO: no son secciones. Se pintan aparte,
   // en `UtilityLayer`, porque un boton flotante no ocupa un lugar en la pagina.
   //
-  // Se resuelve con `ALL_BLOCKS_MAP` y no con `ORGANISMS_MAP`: los formularios
-  // son MOLECULAS (`category: "molecules"`), y el mapa de organismos solo
-  // contiene organismos. Filtrando por ahi, un `ContactForm` guardado como
-  // bloque se descartaba en silencio y la pagina se pintaba sin el formulario.
+  // Se comprueba contra el mapa que llego por props, no contra el registry: si
+  // un bloque no tiene componente, pintarlo daria un error de React en vez de
+  // omitirse. La lista de nombres validos la sigue decidiendo el servidor.
   const visibleBlocks = (blocks ?? []).filter(
     (block) =>
-      ALL_BLOCKS_MAP.has(block.metaName) && !isUtilityBlock(block.metaName),
+      Boolean(components[block.metaName]) && !isUtilityBlock(block.metaName),
   );
 
   const hasUtilities = (blocks ?? []).some((block) =>
@@ -107,19 +133,21 @@ export function PageRenderer({
       style={{ backgroundColor: "var(--site-background)" }}
     >
       {visibleBlocks.map((block) => {
-        const entry = ALL_BLOCKS_MAP.get(block.metaName);
+        const entry = components[block.metaName];
         if (!entry) return null;
 
         // La agenda (y cualquier organismo con logica de cliente) necesita su
         // version conectada tambien en la web publica, no solo en el editor.
-        const Component =
-          CONNECTED_ORGANISMS[block.metaName] ?? entry.component;
+        const Component = CONNECTED_ORGANISMS[block.metaName] ?? entry;
 
         // Los defaults del meta rellenan lo que falte. Sin esto, una pagina
         // cuyos bloques lleguen sin props (migracion, edicion por API) se
         // renderiza en blanco en vez de mostrar su contenido por defecto.
+        //
+        // Vienen resueltos del servidor, junto con los componentes: pedirlos
+        // aqui obligaria a importar el registry en el navegador.
         const props = {
-          ...getDefaultPropsForOrganism(block.metaName),
+          ...(defaultProps[block.metaName] ?? {}),
           ...(block.props ?? {}),
         };
 
@@ -184,7 +212,9 @@ export function PageRenderer({
         web publicada. Antes solo las pintaba el canvas, asi que el cliente
         configuraba el boton, lo veia en el editor y no en su pagina.
       */}
-      {hasUtilities ? <UtilityLayer blocks={blocks} /> : null}
+      {hasUtilities ? (
+        <UtilityLayer blocks={blocks} components={components} />
+      ) : null}
     </div>
   );
 }

@@ -37,7 +37,14 @@ export const ORGANISMS_REGISTRY: ComponentRegistryEntry[] = getRegistryComponent
  * en una capa aparte: un elemento `fixed` dentro de un contenedor con
  * `overflow` recortado y `transform` de zoom quedaria anclado al lienzo
  * escalado en vez de a la ventana.
+ *
+ * **Las funciones puras viven en `block-metas.ts`.** Se re-exportan aqui para
+ * que el editor tenga un solo import, pero quien las use desde el CLIENTE
+ * (la web publica) debe importar `block-metas` directamente: este archivo
+ * arrastra el registro completo de componentes.
  */
+export { HEADER_BLOCKS, isUtilityBlock } from "./block-metas";
+
 export const UTILITIES_REGISTRY: ComponentRegistryEntry[] =
   getRegistryComponents({ category: "utilities" });
 
@@ -45,30 +52,6 @@ export const UTILITIES_REGISTRY: ComponentRegistryEntry[] =
 export const UTILITY_NAMES = new Set(
   UTILITIES_REGISTRY.map((entry) => entry.meta.name),
 );
-
-/** `true` si el bloque es una utilidad y no contenido de la pagina. */
-export function isUtilityBlock(metaName: string): boolean {
-  return UTILITY_NAMES.has(metaName);
-}
-
-/**
- * Cabeceras del design system, que muestran el logo del sitio.
- *
- * Vive aqui y no en cada renderizador para que el editor y la web publica usen
- * LA MISMA lista: son dos sitios distintos que deben mostrar el logo igual, y
- * dos listas copiadas acabarian divergiendo (una con la cabecera nueva y la
- * otra sin ella) sin que nada lo avisara.
- *
- * Se identifican por nombre porque las props del bloque vienen del editor y el
- * cliente no elige ahi su logo: es un dato del SITIO, y se inyecta al renderizar.
- */
-export const HEADER_BLOCKS = new Set([
-  "MedicalHeader",
-  "DentistHeader",
-  "SkincareHeader",
-  "InteractiveSiteHeader",
-  "SiteHeader",
-]);
 
 /**
  * Organismos aplicables a un vertical concreto.

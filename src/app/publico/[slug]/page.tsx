@@ -1,74 +1,60 @@
-"use client";
+import type { Metadata } from "next";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-
-import { PageRenderer } from "@/components/PageRenderer";
+import { PublicPageClient } from "@/components/PublicPageClient";
 import { SiteThemeProvider } from "@/components/SiteThemeProvider";
-import { getPublicPageByPath } from "@/lib/api/pages";
-import { getErrorMessage } from "@/lib/api/errors";
-import type { BlockInstance } from "@/types/editor-state";
+import {
+  getPublicPageByPathOnServer,
+  type PublicPageData,
+} from "@/lib/api/public-page-server";
+import {
+  resolveDefaultProps,
+  resolvePageComponents,
+} from "@/lib/page-components";
 
 /**
- * Web publica del tenant.
+ * Web publica del tenant — **componente de SERVIDOR**.
  *
- * El proxy reescribe la raiz `/` de un subdominio a `/site/<slug>/home`, y esa
- * es la ruta que se sirve aqui: el visitante anonimo ve la pagina PUBLICADA del
- * cliente, no el panel.
+ * ## Por que de servidor (esto es el punto 8 / 9 etapa 1)
  *
- * Los bloques vienen de la API publica y se renderizan sin los adornos del
- * editor, pero CON los organismos conectados (la agenda sigue funcionando).
+ * Un componente cliente no puede emitir `<title>` ni `<meta description>`: esos
+ * llegan al navegador por `document.title`, **despues** de descargar y ejecutar
+ * JS. Google ve el HTML inicial; con el cliente veia el `<title>` del template
+ * —el del panel— y no el del negocio.
+ *
+ * ## Las DOS mitades
+ *
+ * | Pieza | Donde vive |
+ * |---|---|
+ * | Pedir la pagina, metas, 404 | **Aqui**, en el servidor |
+ * | Aviso de pago y salto a ancla | `PublicPageClient`, lo unico que necesita el navegador |
+ *
+ * ## De donde salen el slug y la ruta
+ *
+ * El proxy reescribe a `/publico/<slug>?path=/agenda` y ademas escribe el slug en
+ * la cabecera `x-tenant-slug` de la peticion reescrita (`proxy.ts`). Aqui se leen
+ * **los `params` y `searchParams` de la propia ruta**, que es lo que Next entrega
+ * al servidor: el parametro dinamico trae el slug y el query `path` trae la
+ * pagina. No hace falta mirar cabeceras.
  */
-export default function PublicHomePage() {
-  // `useSearchParams` exige un limite de Suspense para poder prerenderizar.
-  return (
-    <Suspense fallback={<PublicLoading />}>
-      <PublicPageContent />
-    </Suspense>
-  );
-}
 
 /**
- * Aplica el icono del sitio como favicon de la pestana.
- *
- * Se hace por DOM y no con `metadata` de Next porque esta pagina es un
- * componente CLIENTE: el icono llega en la respuesta de la API junto a los
- * bloques, y los metadatos de Next se resuelven en el servidor, antes de que
- * exista ese dato.
- *
- * Reutiliza el `<link rel="icon">` que Next ya emitio, en vez de añadir otro:
- * con dos, el navegador puede quedarse con el viejo. Si el sitio no tiene
- * icono, se restaura el del template para no dejar el de otro tenant tras una
- * navegacion entre subdominios.
- */
-function applyFavicon(iconUrl: string | null) {
-  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (!link) return;
-
-  link.href = iconUrl ?? "/favicon.ico";
-}
-
-/**
- * Arma el titulo de la pestana: el nombre del sitio, con la pagina detras.
+ * El titulo de la pestana: el NOMBRE DEL SITIO, con la pagina detras.
  *
  *   home        -> "Clinica Dental"
  *   /agenda     -> "Agenda · Clinica Dental"
  *
- * Si el sitio no tiene nombre (no deberia: es obligatorio al crear), se cae al
- * `seoTitle` de la pagina, para no dejar la pestana con la URL pelada.
+ * En la home el nombre solo ya es el titulo correcto; en las internas ayuda a
+ * saber donde estas cuando hay varias pestanas abiertas.
  */
 function buildDocumentTitle(
   siteName: string | null | undefined,
   path: string,
 ): string {
-  const brand = siteName?.trim();
-
-  if (!brand) return "Sitio";
+  const brand = siteName?.trim() || "Sitio";
 
   const isHome = path === "/" || path === "";
   if (isHome) return brand;
 
-  // `agenda` -> `Agenda`; `/servicios/implantes` -> `Implantes`.
   const segment = path.replace(/\/+$/, "").split("/").pop() ?? "";
   const pageLabel = segment
     .replace(/[-_]/g, " ")
@@ -78,188 +64,130 @@ function buildDocumentTitle(
   return pageLabel ? `${pageLabel} \u00b7 ${brand}` : brand;
 }
 
-function PublicLoading() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-white">
-      <span className="animate-pulse text-sm text-stone-500">Cargando...</span>
-    </div>
-  );
-}
+/** Los tipos de los parametros de esta ruta. */
+type SitePageParams = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ path?: string }>;
+};
 
 /**
- * Mensaje tras volver del pago.
+ * Metas de la pagina, emitidas en el HTML que recibe el buscador.
  *
- * TRES ESTADOS, no dos: un pago `pending` (efectivo, o una transferencia que
- * tarda) NO es un error, pero tampoco es una reserva confirmada. Decirle
- * "reserva creada" seria mentirle, y tratarlo como fallo le haria pagar otra
- * vez algo que ya esta en camino.
+ * ## Los dos lectores
+ *
+ * `siteName` es **para la persona** que tiene la pestana abierta; `seoTitle` es
+ * **para el buscador** (lo escribe el cliente en el panel y suele ser una frase
+ * larga). Por eso el `<title>` usa el nombre del negocio y el `og:title` usa el
+ * `seoTitle`: al compartir el enlace manda la frase descriptiva.
+ *
+ * ## Lo que NO se hace aqui
+ *
+ * Inventar metas cuando la pagina no existe. Sin pagina publicada no hay nada
+ * que anunciar, y prometerle a Google un titulo de una pagina que da 404 es peor
+ * que no decir nada.
  */
-function PaymentNotice({
-  outcome,
-  appointmentId,
-}: {
-  outcome: string;
-  appointmentId: string | null;
-}) {
-  const config = {
-    ok: {
-      bg: "bg-emerald-50 border-emerald-200",
-      text: "text-emerald-900",
-      title: "¡Reserva confirmada!",
-      body: "Tu pago se procesó correctamente y tu hora quedó reservada. Te esperamos.",
-    },
-    pendiente: {
-      bg: "bg-amber-50 border-amber-200",
-      text: "text-amber-900",
-      title: "Pago en proceso",
-      body: "Tu pago está pendiente de confirmación. La hora queda retenida mientras se acredita; te avisaremos cuando se confirme.",
-    },
-    error: {
-      bg: "bg-red-50 border-red-200",
-      text: "text-red-900",
-      title: "No pudimos completar el pago",
-      body: "La hora NO quedó reservada. Puedes intentarlo de nuevo desde la agenda.",
-    },
-  }[outcome];
+export async function generateMetadata({
+  params,
+  searchParams,
+}: SitePageParams): Promise<Metadata> {
+  const { slug } = await params;
+  const { path: rawPath } = await searchParams;
+  const path = rawPath || "/";
 
-  // Un `outcome` desconocido no muestra nada: es mejor que inventar un mensaje
-  // sobre el estado de un pago.
-  if (!config) return null;
+  if (!slug) return {};
 
+  const page = await getPublicPageByPathOnServer(slug, path).catch(() => null);
+  if (!page) return {};
+
+  const title = buildDocumentTitle(page.siteName, path);
+  const description = page.seoDescripcion?.trim() || undefined;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title: page.seoTitle?.trim() || title,
+      description,
+      type: "website",
+    },
+    ...(page.seoTags && page.seoTags.length > 0
+      ? { keywords: page.seoTags }
+      : {}),
+    ...(page.iconUrl ? { icons: { icon: page.iconUrl } } : {}),
+  };
+}
+
+function PublicNotFound() {
   return (
-    <div
-      data-payment-notice={outcome}
-      className={`border-b ${config.bg} px-4 py-4`}
-    >
-      <div className="mx-auto max-w-3xl">
-        <p className={`text-sm font-bold ${config.text}`}>{config.title}</p>
-        <p className={`mt-1 text-sm ${config.text} opacity-80`}>
-          {config.body}
-        </p>
-
-        {/* Referencia de la cita: permite reclamar con un dato concreto si algo
-            falla, en vez de "reserve ayer por la tarde". */}
-        {appointmentId ? (
-          <p className={`mt-2 font-mono text-[11px] ${config.text} opacity-60`}>
-            Referencia: {appointmentId}
-          </p>
-        ) : null}
-      </div>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+      <h1 className="text-4xl font-bold text-stone-800">404</h1>
+      <p className="max-w-md text-sm text-stone-500">
+        No hay una página publicada en esta dirección.
+      </p>
     </div>
   );
 }
 
-function PublicPageContent() {
-  const searchParams = useSearchParams();
-  const path = searchParams.get("path") ?? "/";
+export default async function PublicSitePage({
+  params,
+  searchParams,
+}: SitePageParams) {
+  const { slug } = await params;
+  const { path: rawPath } = await searchParams;
+  const path = rawPath || "/";
 
-  /**
-   * Resultado del pago, cuando el paciente vuelve de Mercado Pago.
-   *
-   * Mercado Pago redirige a la web con `?pago=ok|pendiente|error`. Se lee aqui
-   * porque es la WEB la que muestra el mensaje al paciente: si nadie lo leyera,
-   * volveria de pagar y veria la misma pagina de siempre, sin saber si su
-   * reserva quedo hecha.
-   */
-  const paymentOutcome = searchParams.get("pago");
-  const paidAppointmentId = searchParams.get("cita");
+  if (!slug) return <PublicNotFound />;
 
-  const [blocks, setBlocks] = useState<BlockInstance[] | null>(null);
-  const [palette, setPalette] = useState<unknown>(null);
-  /**
-   * Logo del sitio, para inyectarlo en las cabeceras.
-   *
-   * Es el mismo icono que el favicon: el cliente lo sube UNA vez y sirve para
-   * los dos. Va en su propio estado (no solo en `document.title`/favicon) porque
-   * tiene que llegar a los bloques por props.
-   */
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  let page: PublicPageData | null = null;
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void getPublicPageByPath(path)
-      .then((page) => {
-        if (cancelled) return;
-        setBlocks(page.publishedBlocks ?? []);
-        // La paleta viene en la MISMA respuesta que los bloques: si se pidiera
-        // aparte, la web se pintaria primero con los colores por defecto.
-        setPalette(page.palette ?? null);
-        // El titulo es el NOMBRE DEL SITIO, no el `seoTitle` de la pagina: el
-        // visitante debe reconocer el negocio en la pestana, y `seoTitle` esta
-        // pensado para buscadores (suele ser una frase larga).
-        //
-        // La pagina se añade DETRAS, y solo en las internas: en la home el
-        // nombre solo ya es el titulo correcto, y en `/agenda` ayuda a saber
-        // donde estas cuando hay varias pestanas abiertas.
-        document.title = buildDocumentTitle(page.siteName, path);
-        setLogoUrl(page.iconUrl ?? null);
-        applyFavicon(page.iconUrl ?? null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setBlocks([]);
-
-        /**
-         * Log del error REAL.
-         *
-         * El mensaje de abajo (`No hay una pagina publicada`) se muestra
-         * tambien cuando la peticion FALLA por otro motivo, asi que oculta la
-         * causa: en la WebView el 404 venia de un tenant mal resuelto, no de
-         * que faltara la pagina. Sin este log, los dos casos se ven igual.
-         *
-         * QUITAR cuando se confirme el arreglo.
-         */
-        console.warn("[publico] error al cargar la pagina:", path, err);
-
-        setError(
-          getErrorMessage(err, `No hay una página publicada en "${path}".`),
-        );
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [path]);
-
-  if (blocks === null) return <PublicLoading />;
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white px-6 text-center">
-        <h1 className="text-4xl font-bold text-stone-800">404</h1>
-        <p className="max-w-md text-sm text-stone-500">{error}</p>
-      </div>
-    );
+  try {
+    page = await getPublicPageByPathOnServer(slug, path);
+  } catch (err) {
+    /**
+     * Un fallo real (el API no responde) NO es un 404.
+     *
+     * Se muestra el mismo 404 al visitante —no hay otra cosa que enseñarle— pero
+     * el log deja claro que fue un error de red y no una URL equivocada. Sin
+     * esto, los dos casos se diagnostican igual.
+     */
+    console.error("[publico] error al cargar la pagina:", slug, path, err);
+    return <PublicNotFound />;
   }
 
+  if (!page) return <PublicNotFound />;
+
+  const blocks = page.publishedBlocks ?? [];
+
+  /**
+   * Los componentes y los props por defecto se resuelven AQUI, en el servidor.
+   *
+   * ## Por que es lo que baja el bundle
+   *
+   * Si `PageRenderer` los buscara por su cuenta, tendria que importar
+   * `ALL_BLOCKS_MAP`, que arrastra los **130 componentes** del design system
+   * (incluidas las 50 plantillas de pagina entera). Aqui se mira **solo** los que
+   * esta pagina usa y se pasan ya resueltos.
+   *
+   * Los componentes viajan como referencias de React Server Components, no
+   * como codigo: el visitante recibe el HTML de las secciones y el JS de las que
+   * de verdad son interactivas.
+   */
+  const components = resolvePageComponents(blocks);
+  const defaultProps = resolveDefaultProps(blocks);
+
   return (
-    <SiteThemeProvider palette={palette}>
+    <SiteThemeProvider palette={page.palette ?? null}>
       {/*
-        Aviso de pago, ARRIBA de la pagina.
-
-        Va sobre los bloques y no dentro del agendador: el paciente acaba de
-        volver de otra pestana y necesita ver el resultado sin buscarlo. Y el
-        agendador pudo quedar en el paso 1, sin relacion con lo que paso.
+        El unico trozo de cliente: el aviso de pago (`?pago=`) y el salto a un
+        ancla (`#seccion`). Los bloques ya vienen armados desde aqui, asi que el
+        HTML sale con contenido y no con un "Cargando...".
       */}
-      {paymentOutcome ? (
-        <PaymentNotice outcome={paymentOutcome} appointmentId={paidAppointmentId} />
-      ) : null}
-
-      {/*
-        `interactive`: esta es la web REAL que ve el visitante, asi que los
-        formularios deben poder rellenarse y enviarse.
-
-        `pagePath` alimenta el aviso por correo ("recibido en /contacto"). Va
-        aqui y no en los props del bloque: la ruta es del sitio, no del
-        formulario, y moverlo de pagina no debe obligar a reconfigurarlo.
-      */}
-      <PageRenderer
+      <PublicPageClient
         blocks={blocks}
-        interactive
+        components={components}
+        defaultProps={defaultProps}
         pagePath={path}
-        logoUrl={logoUrl}
+        logoUrl={page.iconUrl ?? null}
       />
     </SiteThemeProvider>
   );

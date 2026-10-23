@@ -1,51 +1,35 @@
 "use client";
 
-import type { ComponentType } from "react";
-
-import { BLOCK_METAS_BY_NAME } from "@multitenant/design-system";
-
-import { ALL_BLOCKS_MAP, UTILITY_NAMES } from "@/lib/editor-registry";
+import { BLOCK_METAS_BY_NAME } from "@multitenant/design-system/block-metas";
 
 /**
- * Los componentes de las **utilidades**, y solo esos.
+ * Lo que la web publica necesita saber de las **utilidades**, sin sus componentes.
  *
- * ## Por que no `ALL_BLOCKS_MAP`
+ * ## La cadena de intentos fallidos (para no repetirlos)
  *
- * `UtilityLayer` es cliente y pintaba las utilidades resolviéndolas contra
- * `ALL_BLOCKS_MAP`, el mapa con **todos** los componentes. Con eso, el navigador
- * del visitante acababa descargando el catálogo entero del design system.
+ * | Intento | Por que no funciono |
+ * |---|---|
+ * | Filtrar `ALL_BLOCKS_MAP` en runtime | Filtrar no ahorra bytes: el bundler incluye todo para poder filtrar |
+ * | Importar `UTILITIES_REGISTRY` | Ese modulo llama a `getRegistryComponents()`, que arma el registro completo |
+ * | `sideEffects: false` en el design system | `componentRegistry` **es** un efecto: se calcula al importar |
  *
- * Medido (punto 8.5): **2,6 MB de JS**, casi todo un solo chunk. Este import era
- * el último que quedaba tras convertir `PageRenderer` en componente de servidor.
+ * Resultado en los tres casos: **1205 KB** de JS en la web del visitante.
  *
- * ## Que se gana
+ * ## La forma definitiva
  *
- * Las utilidades son dos o tres componentes (botón de WhatsApp, formulario de
- * contacto). Acotar el mapa a esos deja fuera todo lo demás.
+ * Los componentes llegan **por props**, resueltos en el SERVIDOR por
+ * `resolvePageComponents` (`lib/page-components.ts`). Este modulo se queda con lo
+ * unico que no pesa: los metadatos.
  *
- * ## Por que se filtra al cargar el módulo
- *
- * Es una sola pasada sobre el mapa completo, que ya está en memoria por el
- * import. No hay coste apreciable, y así la resolución en el render es un acceso
- * directo.
+ * > **No importar `editor-registry` ni `ALL_BLOCKS_MAP` aqui.** Si se hace, el
+ * > visitante vuelve a descargar el catalogo del editor. Ver `MEDICION-BUNDLE.md`.
  */
-export const UTILITY_COMPONENTS: Record<
-  string,
-  ComponentType<any>
-> = Object.fromEntries(
-  Array.from(UTILITY_NAMES)
-    .map((name) => {
-      const component = ALL_BLOCKS_MAP.get(name)?.component;
-      return component ? [name, component] : null;
-    })
-    .filter((entry): entry is [string, ComponentType<any>] => entry !== null),
-);
 
 /**
- * Metadatos de las utilidades, para sus props por defecto.
+ * Metadatos de una utilidad: nombre visible, campos e icono.
  *
- * Se usan los del design system, que ya vienen por nombre y no arrastran
- * componentes.
+ * `BLOCK_METAS_BY_NAME` son **solo datos**: el design system los expone aparte
+ * de los componentes precisamente para esto.
  */
 export function utilityMeta(name: string) {
   return BLOCK_METAS_BY_NAME[name];

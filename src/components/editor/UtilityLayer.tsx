@@ -1,13 +1,20 @@
 "use client";
 
-import {
-  ALL_BLOCKS_MAP,
-  isUtilityBlock,
-} from "@/lib/editor-registry";
+import { isUtilityBlock } from "@/lib/block-metas";
+import type { ComponentType } from "react";
 import type { BlockInstance } from "@/types/editor-state";
 
 interface UtilityLayerProps {
   blocks: BlockInstance[];
+  /**
+   * Los componentes de las utilidades, resueltos por quien pinta la pagina.
+   *
+   * En la web publica vienen del SERVIDOR (`resolvePageComponents`); en el
+   * canvas, del mapa del editor. Este componente **no importa ninguno**: si lo
+   * hiciera, el visitante descargaria el catalogo del design system.
+   * Ver `MEDICION-BUNDLE.md`.
+   */
+  components?: Record<string, ComponentType<any>>;
   /**
    * `true` dentro del editor: ancla las utilidades al lienzo en vez de a la
    * ventana, para que no floten sobre los paneles del editor.
@@ -28,7 +35,11 @@ interface UtilityLayerProps {
  * el resultado que vera el visitante y conviene poder comprobarlo desde el
  * editor sin publicar.
  */
-export function UtilityLayer({ blocks, contained = false }: UtilityLayerProps) {
+export function UtilityLayer({
+  blocks,
+  components,
+  contained = false,
+}: UtilityLayerProps) {
   const utilities = blocks.filter((block) => isUtilityBlock(block.metaName));
 
   if (utilities.length === 0) return null;
@@ -40,10 +51,8 @@ export function UtilityLayer({ blocks, contained = false }: UtilityLayerProps) {
       style={{ pointerEvents: "none" }}
     >
       {utilities.map((block) => {
-        const entry = ALL_BLOCKS_MAP.get(block.metaName);
-        if (!entry) return null;
-
-        const Component = entry.component;
+        const Component = components?.[block.metaName];
+        if (!Component) return null;
 
         return (
           <div key={block.id} style={{ pointerEvents: "auto" }}>

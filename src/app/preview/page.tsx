@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageRenderer } from "@/components/PageRenderer";
 import { SiteThemeProvider } from "@/components/SiteThemeProvider";
 import { readPreviewPalette } from "@/lib/preview-palette";
 import { useEditorStore } from "@/hooks/useEditorStore";
+import { ALL_BLOCKS_MAP, getDefaultPropsForOrganism } from "@/lib/editor-registry";
 
 /**
  * Preview del BORRADOR del editor, en una pestana aparte.
@@ -45,6 +46,39 @@ function PreviewContent() {
    */
   const [sitePalette, setSitePalette] = useState<unknown>(null);
   const [siteType, setSiteType] = useState<string | null>(null);
+
+  /**
+   * Los componentes del preview, resueltos aqui.
+   *
+   * ## Por que en la pagina y no en `PageRenderer`
+   *
+   * `PageRenderer` ya no importa `ALL_BLOCKS_MAP` (era lo que metia los 130
+   * componentes del design system en el bundle de la web publica). El preview si
+   * puede permitirse ese import: es una pantalla del EDITOR, no la web del
+   * visitante, y necesita poder pintar cualquier bloque mientras se edita.
+   *
+   * Se memoiza por la lista de bloques: recalcular el mapa en cada render del
+   * preview seria trabajo tirado, y la lista cambia menos que el render.
+   */
+  const previewComponents = useMemo(
+    () =>
+      Object.fromEntries(
+        Array.from(new Set(blocks.map((block) => block.metaName)))
+          .map((name) => [name, ALL_BLOCKS_MAP.get(name)?.component])
+          .filter(([, component]) => Boolean(component)),
+      ) as Record<string, any>,
+    [blocks],
+  );
+
+  const previewDefaultProps = useMemo(
+    () =>
+      Object.fromEntries(
+        Array.from(new Set(blocks.map((block) => block.metaName))).map(
+          (name) => [name, getDefaultPropsForOrganism(name)],
+        ),
+      ) as Record<string, Record<string, unknown>>,
+    [blocks],
+  );
 
   // El store arranca vacio (skipHydration) y se rellena desde localStorage.
   // Esperamos a esa rehidratacion para no pintar un preview en blanco.
@@ -90,7 +124,13 @@ function PreviewContent() {
         El editor (canvas) los deja en modo diseno; aqui no, porque este es
         justamente el sitio donde se prueba.
       */}
-      <PageRenderer blocks={blocks} interactive pagePath="/preview" />
+      <PageRenderer
+        blocks={blocks}
+        components={previewComponents}
+        defaultProps={previewDefaultProps}
+        interactive
+        pagePath="/preview"
+      />
     </SiteThemeProvider>
   );
 }
