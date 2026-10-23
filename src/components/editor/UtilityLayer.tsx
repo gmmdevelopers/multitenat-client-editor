@@ -1,6 +1,6 @@
 "use client";
 
-import { isUtilityBlock } from "@/lib/block-metas";
+import { isUtilityBlock } from "@/lib/block-names";
 import type { ComponentType } from "react";
 import type { BlockInstance } from "@/types/editor-state";
 

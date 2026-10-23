@@ -26,9 +26,23 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
       git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
     fi
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN corepack enable && corepack prepare pnpm@9 --activate
+# ## La version de pnpm NO es un detalle
+#
+# Tiene que coincidir con la que genero el `pnpm-lock.yaml`. El lockfile guarda
+# el bloque `overrides` tal como lo ve esa version, y pnpm lo compara al instalar
+# con `--frozen-lockfile`:
+#
+#     ERR_PNPM_LOCKFILE_CONFIG_MISMATCH
+#     The current "overrides" configuration doesn't match the value found in the lockfile
+#
+# Con pnpm 9, ademas, `pnpm-workspace.yaml` usa `allowBuilds`, una clave que esa
+# version no conoce (la suya es `onlyBuiltDependencies`), asi que la lee como un
+# `overrides` distinto y el check falla.
+#
+# Al actualizar pnpm en local, actualiza esta linea tambien.
+RUN corepack enable && corepack prepare pnpm@11 --activate
 
 # Sin el lockfile congelado, una actualizacion del DS podria cambiar el arbol de
 # dependencias sin que nadie lo revise.

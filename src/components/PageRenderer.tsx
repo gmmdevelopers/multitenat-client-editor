@@ -3,7 +3,7 @@
 import {
   HEADER_BLOCKS,
   isUtilityBlock,
-} from "@/lib/block-metas";
+} from "@/lib/block-names";
 import { CONNECTED_ORGANISMS } from "@/components/editor/connected-organisms";
 import { UtilityLayer } from "@/components/editor/UtilityLayer";
 import { BlockInstance } from "@/types/editor-state";
