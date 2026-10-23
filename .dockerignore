@@ -19,3 +19,17 @@ coverage
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+
+# ## El lockfile NO entra al contenedor
+#
+# Lleva incrustado el override de DESARROLLO del design system:
+#
+#     '@multitenant/design-system': link:../packages/design-system
+#
+# En Docker no hay monorepo, asi que ese `link:` apunta a una carpeta que no
+# existe. pnpm instalaba el enlace muerto **sin dar error** y el paquete quedaba
+# sin instalar; el build fallaba despues con un sintoma que no lo explicaba.
+#
+# El Dockerfile copia `pnpm-workspace.yaml` y le quita el bloque `overrides`,
+# conservando `allowBuilds` (que autoriza los scripts de compilacion).
+pnpm-lock.yaml
