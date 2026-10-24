@@ -38,12 +38,12 @@ export const ORGANISMS_REGISTRY: ComponentRegistryEntry[] = getRegistryComponent
  * `overflow` recortado y `transform` de zoom quedaria anclado al lienzo
  * escalado en vez de a la ventana.
  *
- * **Las funciones puras viven en `block-metas.ts`.** Se re-exportan aqui para
- * que el editor tenga un solo import, pero quien las use desde el CLIENTE
- * (la web publica) debe importar `block-metas` directamente: este archivo
- * arrastra el registro completo de componentes.
+ * **Las funciones puras viven en `block-names.ts`.** Se re-exportan aqui para
+ * que el editor tenga un solo import. Antes estaban en `block-metas.ts`, que
+ * existia solo para la web publica (importaba los metadatos del design system
+ * sin los componentes). Esa web se sirve ahora desde `web-viewer`.
  */
-export { HEADER_BLOCKS, isUtilityBlock } from "./block-metas";
+export { HEADER_BLOCKS, isUtilityBlock } from "./block-names";
 
 export const UTILITIES_REGISTRY: ComponentRegistryEntry[] =
   getRegistryComponents({ category: "utilities" });

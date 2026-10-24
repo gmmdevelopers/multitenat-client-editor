@@ -4,8 +4,8 @@
  * ## Por que este archivo existe (8.9, la ultima capa)
  *
  * `PageRenderer` y `UtilityLayer` solo necesitaban dos respuestas:
- * "¿es una utilidad?" y "¿es una cabecera?". Las pedian a `block-metas.ts`, que
- * importa los **130 metadatos** del design system para poder derivarlas.
+ * "¿es una utilidad?" y "¿es una cabecera?". Las pedian a un modulo que
+ * importaba los **130 metadatos** del design system para poder derivarlas.
  *
  * Y esos metadatos pesan: los 50 de plantillas de pagina suman **252 KB de
  * fuente**, porque cada uno lleva un `defaultValue` con la pagina entera (hero,
@@ -24,10 +24,11 @@
  * Porque derivarlas exige leer los metadatos, que es justo lo que se acaba de
  * sacar del cliente.
  *
- * El riesgo (que una lista se desincronice) se cubre con **`block-metas.test`**
- * —no en runtime, en el build—: compara estas listas contra los metadatos
- * reales y falla si alguien añade una utilidad al design system sin ponerla
- * aqui. Es una prueba que se corre una vez y protege para siempre.
+ * El riesgo es que una lista se desincronice del design system al añadir una
+ * utilidad nueva. Hoy no hay una prueba automatica que lo detecte: si el nombre
+ * no esta aqui, el bloque se trata como contenido y se pinta en el flujo de la
+ * pagina en vez de en la capa de utilidades. Al añadir una utilidad al DS, hay
+ * que sumarla a `UTILITY_NAMES`.
  */
 
 /**
