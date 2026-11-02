@@ -17,6 +17,7 @@ import {
 } from "./fields";
 import {
   formatPhoneMask,
+  formatRutMask,
   isPhoneComplete,
   isValidRut,
   PHONE_PREFIX,
@@ -206,10 +207,18 @@ export function StepBusiness({
           id="taxId"
           data-testid="register-taxId"
           type="text"
-          value={draft.taxId}
-          onChange={(e) => onChange({ taxId: e.target.value })}
+          inputMode="text"
+          autoComplete="off"
+          // El draft guarda el RUT sin formato (`18816586-9`... o `188165869`):
+          // la mascara solo se aplica al pintar el campo. Asi el valor que se
+          // envia al backend no cambia y `isValidRut` valida lo mismo de siempre.
+          value={formatRutMask(draft.taxId)}
+          onChange={(e) =>
+            onChange({ taxId: e.target.value.replace(/[^\dk]/gi, "").toUpperCase() })
+          }
           onBlur={() => setTouched((t) => ({ ...t, taxId: true }))}
           placeholder="12.345.678-5"
+          maxLength={12}
           className={fieldError("taxId") ? inputErrorClass : inputClass}
         />
       </Field>

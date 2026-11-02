@@ -32,6 +32,37 @@ export function isValidRut(raw: string): boolean {
 }
 
 /**
+ * Aplica la mascara `99.999.999-9` mientras el usuario escribe el RUT.
+ *
+ * Se descartan todos los caracteres que no sean digitos (salvo la `K` final del
+ * digito verificador) y se reagrupan: da igual que el cliente pegue
+ * `18816586-9`, `18.816.5869` o `188165869` — todos acaban en `18.816.586-9`.
+ *
+ * El cuerpo se agrupa de derecha a izquierda (miles), asi que el punto no se
+ * "mueve" al borrar: con 7 digitos da `1.234.567` y con 8 `12.345.678`.
+ *
+ * Es SOLO visual: el valor que se manda al backend sigue siendo lo que haya en
+ * el draft. Si se guardara el valor formateado, cada consumidor tendria que
+ * limpiarlo antes de comparar o buscar, y el mismo RUT podria quedar guardado
+ * como `18816586-9` o `18.816.586-9` segun como lo escribiera el cliente. El
+ * backend lo normaliza al crear el tenant (`normalizeRut`).
+ */
+export function formatRutMask(raw: string): string {
+  const cleaned = raw.replace(/[^\dk]/gi, "").toUpperCase();
+
+  const body = cleaned.slice(0, 8);
+  const verifier = cleaned.slice(8, 9);
+
+  // Los digitos del cuerpo se agrupan en miles: `1234567` -> `1.234.567`.
+  const grouped = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+  // Mientras no hay digito verificador se ve solo el cuerpo (con su punto) y
+  // el guion aparece cuando ya se escribio: si no, con el primer digito se
+  // veria `1-` y pareceria un error.
+  return verifier ? `${grouped}-${verifier}` : grouped;
+}
+
+/**
  * Convierte un nombre en identificador de sitio.
  *
  * Debe coincidir con `normalizeSlug` del backend: si aqui se mostrara una URL y

@@ -2,22 +2,34 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
-import { getErrorMessage } from "@/lib/api/errors";
+import { getErrorMessage, getErrorCode } from "@/lib/api/errors";
 
 export default function LoginPage() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
   const toast = useToast();
+  const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState("");
+  // `?email=` lo pone la pantalla de vuelta del registro (`/register/gracias`),
+  // que no puede iniciar sesion sola: el registro ya no devuelve token. Asi el
+  // cliente no tiene que volver a escribir el correo que acaba de pagar.
+  const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Codigo del error del backend, si lo trae.
+   *
+   * `PAYMENT_PENDING` y `REGISTRATION_EXPIRED` no son fallos de credenciales:
+   * significan que el alta existe pero su pago aun no se confirmo. Se pintan
+   * distinto para que el cliente no crea que se equivoco de contrasena.
+   */
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Si ya hay una sesion valida en memoria, no tiene sentido mostrar el
@@ -31,6 +43,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setErrorCode(null);
     setIsSubmitting(true);
 
     try {
@@ -40,29 +53,45 @@ export default function LoginPage() {
         err,
         "Error de autenticación. Verifica tus datos.",
       );
+      const code = getErrorCode(err);
+
+      // El aviso de pago pendiente NO va por toast: necesita quedarse en
+      // pantalla, porque lleva un boton para retomar el pago.
       setError(message);
-      toast.error(message);
+      setErrorCode(code);
+
+      if (!code) {
+        toast.error(message);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen justify-center bg-gray-950 px-4 py-4">
-      {/* Resplandor decorativo: da profundidad sin cargar la pantalla. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-      >
-        <div className="absolute left-1/2 top-0 h-[420px] w-[720px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 blur-3xl" />
-      </div>
+    /*
+     * Sin `min-h-screen` ni fondo propio: el layout de `(auth)` ya ocupa el
+     * viewport, pinta el gradiente y centra a sus hijos. Repetirlo aqui era lo
+     * que hacia que la tarjeta se estirara en vez de medir su contenido.
+     *
+     * `shrink-0 self-start` fija ese segundo punto: como hijo de un flex, la
+     * tarjeta puede crecer hasta el alto disponible, y `self-start` la deja
+     * empezar arriba y medir solo lo suyo. El centrado vertical lo sigue
+     * haciendo el `items-center` del layout.
+     */
+    <div className="relative w-full max-w-md shrink-0 self-start">
+      <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/80 shadow-2xl backdrop-blur">
+        {/* Filo superior de color: mismo detalle que la tarjeta de registro. */}
+        <div
+          aria-hidden
+          className="h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent"
+        />
 
-      <div className="relative w-full max-w-md">
-        <div className="rounded-2xl border border-gray-800 bg-gray-900/80 p-8 shadow-2xl backdrop-blur">
+        <div className="p-8">
           {/* Cabecera */}
           <div className="mb-7 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-gray-800 bg-gray-950">
-              <span aria-hidden className="text-lg text-blue-400">
+            <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-gray-800 bg-gray-950">
+              <span aria-hidden className="text-base text-blue-400">
                 ◆
               </span>
             </div>
@@ -74,8 +103,42 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Alerta de error */}
-          {error ? (
+          {/* Alerta de error
+           *
+           * Dos formas, porque no son lo mismo:
+           * - Credenciales mal: rojo, es un fallo del cliente.
+           * - Pago pendiente: ambar + boton para reanudar. NO es un fallo suyo: su
+           *   cuenta existe pero el pago aun no se confirmo, y aqui puede seguir
+           *   desde donde lo dejo en vez de volver a registrarse (lo que crearia
+           *   otra alta y posiblemente otro cobro).
+           */}
+          {error && errorCode === "PAYMENT_PENDING" ? (
+            <div
+              role="status"
+              className="mb-5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200"
+            >
+              <p className="flex items-start gap-2">
+                <span aria-hidden className="mt-0.5 shrink-0">
+                  ◷
+                </span>
+                <span>{error}</span>
+              </p>
+
+              {/* El slug no se pide aqui: el alta ya tiene el suyo guardado en
+                  el backend, y pedirlo obligaria al cliente a recordarlo. */}
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    `/register/gracias/continuar?email=${encodeURIComponent(email)}`,
+                  )
+                }
+                className="mt-3 w-full rounded-lg border border-amber-500/50 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/15"
+              >
+                Retomar el pago
+              </button>
+            </div>
+          ) : error ? (
             <div
               role="alert"
               className="mb-5 flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300"
@@ -102,7 +165,7 @@ export default function LoginPage() {
                 placeholder="salud-bienestar"
                 value={tenantSlug}
                 onChange={(e) => setTenantSlug(e.target.value)}
-                className="w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white transition placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white transition placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-0"
               />
               <p className="mt-1.5 text-[11px] text-gray-500">
                 El identificador de tu sitio: aparece en tu dirección web.
@@ -124,7 +187,7 @@ export default function LoginPage() {
                 placeholder="admin@clinica.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white transition placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white transition placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-0"
               />
             </div>
 
@@ -144,7 +207,7 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 pr-16 text-sm text-white transition placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 pr-16 text-sm text-white transition placeholder:text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-0"
                 />
                 {/* Mostrar la contrasena evita el error mas comun al entrar:
                     escribirla mal sin poder comprobarlo. */}
@@ -169,24 +232,27 @@ export default function LoginPage() {
               {isSubmitting ? "Entrando..." : "Entrar al panel"}
             </button>
           </form>
+          </div>
 
-          {/* Enlace al registro: quien llega aqui sin cuenta debe poder crearla
-              sin tener que adivinar la URL. */}
-          <p className="mt-6 border-t border-gray-800 pt-5 text-center text-sm text-gray-400">
-            ¿Todavía no tienes cuenta?{" "}
-            <Link
-              href="/register"
-              className="font-semibold text-blue-400 transition hover:text-blue-300"
-            >
-              Crear una
-            </Link>
-          </p>
+          {/* Pie de tarjeta con su propio borde, fuera del padding del formulario:
+              asi el separador llega a los bordes de la tarjeta y se lee como
+              parte de ella, no como margen del formulario. */}
+          <div className="border-t border-gray-800/80 px-8 py-4">
+            <p className="text-center text-sm text-gray-400">
+              ¿Todavía no tienes cuenta?{" "}
+              <Link
+                href="/register"
+                className="font-semibold text-blue-400 transition hover:text-blue-300"
+              >
+                Crear una
+              </Link>
+            </p>
+          </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-gray-600">
+        <p className="mt-5 text-center text-xs text-gray-600">
           ¿Problemas para entrar? Escríbenos y te ayudamos.
         </p>
       </div>
-    </div>
   );
 }

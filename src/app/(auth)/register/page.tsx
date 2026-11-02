@@ -2,12 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { getErrorMessage } from "@/lib/api/errors";
-import { persistToken } from "@/context/AuthContext";
 import {
-  createCheckout,
+  createPendingCheckout,
   registerTenant,
   type RegisterTenantPayload,
 } from "@/lib/api/registration";
@@ -29,24 +27,29 @@ import {
  * luego cuanto pagas) y deja el captcha en el ultimo paso: su token caduca en
  * unos minutos, asi que resolverlo al principio haria que llegara vencido.
  *
- * Al enviar se hacen DOS llamadas, en este orden obligatorio:
+ * ## La cuenta NO se crea aqui
  *
- *   1. POST /tenants/register   → crea el tenant y devuelve la sesion
- *   2. POST /billing/checkout   → crea la suscripcion en Mercado Pago
+ * Al enviar se hacen DOS llamadas, en este orden:
  *
- * El checkout exige sesion, asi que no se puede invertir. Y si el paso 2 falla,
- * la cuenta YA existe: no hay que borrarla (el tenant nace en `basic` y sirve),
- * pero el usuario tiene que poder reintentar el pago sin volver a registrarse.
+ *   1. POST /tenants/register        → valida los datos y guarda un ALTA PENDIENTE
+ *   2. POST /billing/checkout/pending → crea el preapproval de Mercado Pago
+ *
+ * Ninguna de las dos crea el tenant: eso ocurre cuando MP confirma el pago y su
+ * webhook nos avisa. Asi, quien abandona el checkout no deja un tenant ni un
+ * usuario reales ocupando slug y email.
+ *
+ * El cliente termina en la pantalla de vuelta de Mercado Pago, que consulta el
+ * estado del alta hasta que la cuenta existe.
  */
 export default function RegisterPage() {
-  const router = useRouter();
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<RegistrationDraft>(INITIAL_DRAFT);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // Si el registro ya se completo, un reintento NO debe volver a crearlo: solo
-  // repetir el checkout.
-  const [registered, setRegistered] = useState(false);
+  // Si el alta ya se envio, un reintento NO debe volver a enviarla: el captcha
+  // es de un solo uso, y volver a registrar pisaria el alta que ya esta ligada
+  // a un preapproval. Solo se repite el pago.
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   const updateDraft = (patch: Partial<RegistrationDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -57,9 +60,9 @@ export default function RegisterPage() {
     setSubmitError(null);
 
     try {
-      let requiresPayment = true;
+      let currentPendingId = pendingId;
 
-      if (!registered) {
+      if (!currentPendingId) {
         const payload: RegisterTenantPayload = {
           name: draft.name.trim(),
           legalName: draft.legalName.trim() || undefined,
@@ -85,53 +88,36 @@ export default function RegisterPage() {
         };
 
         const result = await registerTenant(payload);
-
-        // `persistToken` escribe el token en localStorage Y en la COOKIE. Las dos
-        // hacen falta, y por motivos distintos:
-        //   - localStorage: lo lee el interceptor para las peticiones al API.
-        //   - cookie: la lee el PROXY (`src/proxy.ts`), que es quien decide si
-        //     deja pasar a las rutas del panel.
-        //
-        // Escribir solo en localStorage hacia que el proxy no viera sesion y
-        // mandara a /login justo despues de registrarse, asi que el cliente
-        // nunca llegaba al onboarding.
-        persistToken(result.accessToken);
-
-        // La sesion se guarda con la MISMA forma que la del login, porque
-        // `AuthContext` la lee igual en los dos casos: espera encontrar
-        // `user.tenant` para saber a que organizacion pertenece la sesion.
-        //
-        // El registro devuelve `tenant` como campo HERMANO de `user`, asi que
-        // hay que anidarlo a mano. Guardarlo plano dejaba `tenant` en `null`,
-        // y `/onboarding/site` no podia resolver el tenant.
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ ...result.user, tenant: result.tenant }),
-        );
-
-        // El proxy usa esta cookie para reescribir las rutas del panel al slug
-        // de la organizacion activa. Sin ella, `/onboarding/site` no resuelve
-        // a que tenant pertenece la peticion.
-        document.cookie = `x-org-slug=${encodeURIComponent(
-          result.tenant.slug,
-        )}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
-
-        setRegistered(true);
-
-        requiresPayment = result.tenant.requiresPayment;
-
-        // El cupon `free_access` ya otorgo el plan sin suscripcion. Se lleva al
-        // panel directamente: crear un checkout aqui suscribiria al cliente a
-        // algo que ya tiene gratis.
-        if (!requiresPayment) {
-          router.replace("/onboarding/site");
-          return;
-        }
+        currentPendingId = result.pendingRegistrationId;
+        setPendingId(currentPendingId);
       }
 
-      const checkout = await createCheckout(
+      // La cuenta todavia NO existe: esto solo crea el preapproval de Mercado
+      // Pago. Se vuelve a `/register/gracias`, que espera a que el webhook
+      // confirme el cobro y cree el tenant.
+      //
+      // ## El id va en el PATH, no en la query. Y es importante.
+      //
+      // Mercado Pago no devuelve al `back_url` tal cual: le concatena sus
+      // parametros (`?preapproval_id=...`). Si nuestra URL ya lleva `?alta=...`,
+      // MP se encuentra con dos `?` y acaba codificando el segundo, de modo que
+      // el `preapproval_id` queda DENTRO de nuestro parametro:
+      //
+      //   /register/gracias?alta=abc%3Fpreapproval_id%3Df82e04...
+      //
+      // El backend recibia `abc?preapproval_id=f82e04...` como id y respondia 404.
+      // Con el id en el path no hay query que mezclar:
+      //
+      //   /register/gracias/abc
+      //
+      // La pagina ademas tolera la forma vieja (ver `normalizePendingId`), por si
+      // algun checkout ya creado vuelve con `?alta=`.
+      const checkout = await createPendingCheckout(
+        currentPendingId,
         draft.requestedPlan,
-        draft.email.trim(),
+        `${window.location.origin}/register/gracias/${encodeURIComponent(
+          currentPendingId,
+        )}`,
       );
 
       if (!checkout.initPoint) {
@@ -149,9 +135,9 @@ export default function RegisterPage() {
       setSubmitError(
         getErrorMessage(
           error,
-          registered
+          pendingId
             ? "No pudimos iniciar el pago. Intenta de nuevo."
-            : "No pudimos crear tu cuenta. Revisa los datos e intenta de nuevo.",
+            : "No pudimos guardar tus datos. Revisalos e intenta de nuevo.",
         ),
       );
       setIsSubmitting(false);
@@ -159,34 +145,69 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900 p-8 shadow-2xl">
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-white">
-          Crear tu cuenta
-        </h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Tres pasos y tu negocio esta en linea.
-        </p>
+    /*
+     * `self-start` es la clave del alto propio.
+     *
+     * El layout de `(auth)` es un flex COLUMN: `<main class="flex-1 flex items-center">`.
+     * El eje transversal de ese main es horizontal, pero al centrarnos con
+     * `items-center` la tarjeta no queda estirada... salvo que algo la haga
+     * crecer. Aqui lo hacian dos cosas a la vez:
+     *   - el registro anadia su PROPIO `min-h-screen`, dentro de un contenedor
+     *     que ya tiene alto de viewport, asi que la tarjeta reclamaba una
+     *     pantalla entera y empujaba al header y al footer;
+     *   - sin `shrink-0`, un flex item puede crecer hasta el alto disponible.
+     *
+     * Con `self-start` + `shrink-0` la tarjeta mide lo que mide su contenido en
+     * cada paso, y el `items-center` del layout la sigue centrando en vertical.
+     * Tambien se quita el fondo opaco: el layout ya pinta el gradiente detras y
+     * duplicar la capa apagaba el efecto.
+     */
+    <div className="relative w-full max-w-md shrink-0 self-start overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/80 shadow-2xl backdrop-blur">
+      {/* Filo superior de color: separa la tarjeta del fondo oscuro sin recargar. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent"
+      />
+
+      <div className="p-8">
+        <div className="mb-7 text-center">
+          {/* Icono con el mismo lenguaje que el login, para que las dos
+              pantallas se lean como parte del mismo producto. */}
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-gray-800 bg-gray-950">
+            <span aria-hidden className="text-base text-blue-400">
+              ◆
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            Crear tu cuenta
+          </h1>
+          <p className="mt-1.5 text-sm text-gray-400">
+            Tres pasos y tu negocio esta en linea.
+          </p>
+        </div>
+
+        <RegisterProgress currentStep={step} />
       </div>
 
-      <RegisterProgress currentStep={step} />
+      {/* El formulario tiene su propio padding: asi los pasos pueden decidir
+          hasta donde llega su separador sin pelear con el de la tarjeta. */}
+      <div className="px-8 pb-8 space-y-6">
+        {step === 1 ? (
+          <StepAccount
+            draft={draft}
+            onChange={updateDraft}
+            onNext={() => setStep(2)}
+          />
+        ) : null}
 
-      {step === 1 ? (
-        <StepAccount
-          draft={draft}
-          onChange={updateDraft}
-          onNext={() => setStep(2)}
-        />
-      ) : null}
-
-      {step === 2 ? (
-        <StepBusiness
-          draft={draft}
-          onChange={updateDraft}
-          onNext={() => setStep(3)}
-          onBack={() => setStep(1)}
-        />
-      ) : null}
+        {step === 2 ? (
+          <StepBusiness
+            draft={draft}
+            onChange={updateDraft}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+          />
+        ) : null}
 
       {step === 3 ? (
         <StepPlan
@@ -198,16 +219,21 @@ export default function RegisterPage() {
           submitError={submitError}
         />
       ) : null}
+      </div>
 
-      <p className="mt-6 text-center text-xs text-gray-500">
-        Ya tienes cuenta?{" "}
-        <Link
-          href="/login"
-          className="font-semibold text-blue-400 hover:text-blue-300"
-        >
-          Inicia sesion
-        </Link>
-      </p>
+      {/* Separador + pie fuera del padding del formulario: se lee como el
+          borde de la tarjeta, no como parte del ultimo paso. */}
+      <div className="border-t border-gray-800/80 px-8 py-4">
+        <p className="text-center text-xs text-gray-500">
+          Ya tienes cuenta?{" "}
+          <Link
+            href="/login"
+            className="font-semibold text-blue-400 transition hover:text-blue-300"
+          >
+            Inicia sesion
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

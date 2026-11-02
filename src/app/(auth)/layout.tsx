@@ -12,10 +12,10 @@ export default function AuthLayout({
       <header className="relative z-10 w-full max-w-7xl mx-auto p-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
-            S
+
           </div>
           <span className="font-bold tracking-tight text-lg text-white">
-            SaaS Platform
+            Multitenant
           </span>
         </div>
       </header>
@@ -27,7 +27,7 @@ export default function AuthLayout({
 
       {/* Footer minimalista */}
       <footer className="relative z-10 w-full max-w-7xl mx-auto p-6 text-center text-xs text-gray-500">
-        &copy; {new Date().getFullYear()} SaaS Platform. Todos los derechos
+        &copy; {new Date().getFullYear()} Multitenant. Todos los derechos
         reservados.
       </footer>
     </div>

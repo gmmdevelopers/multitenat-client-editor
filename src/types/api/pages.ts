@@ -106,6 +106,14 @@ export interface GetPageForEditorResponse {
      * editaba, que parece que la subida no funciono.
      */
     iconImageUrl?: string | null;
+    /**
+     * Nombre del negocio, junto al logo en las cabeceras del lienzo.
+     *
+     * Mismo motivo que `iconImageUrl`: el lienzo tiene que verse como la web
+     * publicada. Sin esto el cliente veia solo su logo mientras editaba y el
+     * nombre aparecia recien al publicar.
+     */
+    siteName?: string | null;
   } | null;
 }
 

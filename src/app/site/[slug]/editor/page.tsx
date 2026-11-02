@@ -93,6 +93,12 @@ export default function PageBuilderPage() {
    * peticion podria dar un canvas con un logo y una web con otro.
    */
   const [siteIconUrl, setSiteIconUrl] = useState<string | null>(null);
+  /**
+   * Nombre del negocio. Va a las cabeceras junto al logo, igual que en la web
+   * publicada: si aqui no llegara, el lienzo mostraria solo el logo y el
+   * cliente no veria el resultado real.
+   */
+  const [siteName, setSiteName] = useState<string | null>(null);
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [isLoadingPages, setIsLoadingPages] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PageSummary | null>(null);
@@ -276,6 +282,7 @@ export default function PageBuilderPage() {
           setSitePalette(page.site.palette ?? null);
           setSiteType(page.site.siteType ?? undefined);
           setSiteIconUrl(page.site.iconImageUrl ?? null);
+          setSiteName(page.site.siteName ?? page.site.domain ?? null);
           storePreviewPalette({
             palette: page.site.palette ?? null,
             siteType: page.site.siteType ?? null,
@@ -967,6 +974,7 @@ export default function PageBuilderPage() {
           palette={sitePalette}
           siteType={siteType}
           logoUrl={siteIconUrl}
+          siteName={siteName}
         />
 
         {/* Sidebar Derecho */}

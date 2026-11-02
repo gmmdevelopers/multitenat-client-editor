@@ -8,11 +8,24 @@ import type { ReactNode } from "react";
  * Estan aqui y no repetidos en cada paso para que un cambio de color o de
  * tamaño no obligue a tocar tres archivos y arriesgar que queden distintos.
  */
+/**
+ * Campo de texto del registro.
+ *
+ * ## Un solo indicador de foco
+ *
+ * El foco se marca con `border` + `ring` del MISMO color y grosor continuo: el
+ * borde pasa a azul y el ring de 1px lo rodea, asi que se lee como un borde
+ * ligeramente mas grueso y no como dos marcos distintos.
+ *
+ * `focus:outline-none` retira el outline global del acento (ambar) que antes se
+ * sumaba a este ring y dejaba el campo con un borde azul dentro y otro naranja
+ * fuera. `ring-offset` se fija a 0 para que el anillo no se separe del borde.
+ */
 export const inputClass =
-  "w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white placeholder-gray-600 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50";
+  "w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-sm text-white placeholder-gray-600 transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 focus:outline-none disabled:opacity-50";
 
 export const inputErrorClass =
-  "w-full rounded-lg border border-red-500/70 bg-gray-950 px-4 py-2.5 text-sm text-white placeholder-gray-600 transition focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50";
+  "w-full rounded-lg border border-red-500/70 bg-gray-950 px-4 py-2.5 text-sm text-white placeholder-gray-600 transition focus:border-red-500 focus:ring-1 focus:ring-red-500 focus:ring-offset-0 focus:outline-none disabled:opacity-50";
 
 export const labelClass =
   "mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-400";

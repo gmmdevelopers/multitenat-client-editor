@@ -98,14 +98,52 @@ export async function proxy(req: NextRequest) {
     /**
      * Sin sesion, cualquier ruta del panel manda al login.
      *
-     * El panel no tiene rutas publicas: el anterior `isAuthRoute` (/login,
-     * /register) y `/preview` existian porque esta misma app servia la web del
-     * tenant. Con la web publica en `web-viewer`, aqui todo exige sesion salvo
-     * el propio login: si no, una ruta con contenido quedaria accesible sin
-     * credenciales. `verify-email` no se ve afectado porque su enlace lleva el
-     * token, que es la credencial real, y cae en `/login` igual.
+     * ## Las unicas rutas publicas
+     *
+     * `/login` y `/register`. El resto exige sesion: si no, una ruta con
+     * contenido quedaria accesible sin credenciales.
+     *
+     * ## Por que `/register` vuelve a estar aqui
+     *
+     * Al desmontar `isAuthRoute` se saco tambien `/register`, y con ello el
+     * alta quedo inalcanzable: la landing enlaza a `app.<dominio>/register`,
+     * este guard la mandaba a `/login?from=%2Fregister` y el login **ignora
+     * `from`**, asi que el visitante sin cuenta se quedaba en un formulario que
+     * no puede rellenar y sin ninguna via para crearse una.
+     *
+     * `/register` es el formulario donde el usuario ES el visitante anonimo; no
+     * expone datos de ningun tenant, asi que se sirve como el login.
+     *
+     * `/register/gracias` es la vuelta del pago de Mercado Pago y se abre SIN
+     * sesion por definicion: la cuenta se esta creando en ese mismo momento. Si
+     * se redirigiera al login, el cliente perderia de vista su registro (el
+     * parametro `alta` es lo que le permite saber si el pago se proceso).
+     *
+     * `verify-email` sigue protegido a proposito: su enlace lleva el token, que
+     * es la credencial real, y sin el cae en `/login` igual.
      */
-    if (!token && pathname !== "/login") {
+    const PUBLIC_PATHS = new Set(["/login", "/register"]);
+
+    /**
+     * Rutas publicas por prefijo, no por igualdad exacta.
+     *
+     * `/register/gracias/<alta>` lleva el id en el PATH: Mercado Pago añade sus
+     * propios parametros al volver (`?preapproval_id=...`), y si el id fuera una
+     * query el `?` de MP acababa codificado y el id llegaba contaminado
+     * (`abc%3Fpreapproval_id%3D...`), lo que provocaba un 404 al consultarlo.
+     *
+     * Con una lista de rutas exactas, esas URLs caian en el redirect al login y
+     * el cliente perdia de vista su registro justo despues de pagar.
+     */
+    const PUBLIC_PREFIXES = ["/register/gracias"];
+
+    const isPublic =
+      PUBLIC_PATHS.has(pathname) ||
+      PUBLIC_PREFIXES.some(
+        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+      );
+
+    if (!token && !isPublic) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("from", pathname);
       return noIndex(NextResponse.redirect(loginUrl));

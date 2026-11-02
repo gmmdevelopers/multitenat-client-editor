@@ -159,8 +159,63 @@ body {
 /*
  * Foco visible consistente. Se define aqui para que ningun componente pueda
  * olvidarlo y dejar la navegacion por teclado sin indicador.
+ *
+ * ## Solo anillo, nunca doble borde
+ *
+ * Antes esto era `outline` global, y los inputs ademas pintaban su propio
+ * `focus:ring-*`. Al enfocar un campo con la regla `focus` (raton o `:focus`
+ * general) se sumaba el outline del acento (ambar de la marca) al ring del
+ * componente, y el campo quedaba con un borde azul POR DENTRO y otro naranja
+ * POR FUERA.
+ *
+ * Ahora el foco es un unico `outline` y cada componente decide su color; los
+ * inputs desactivan el suyo con `focus:outline-none` y usan borde + ring, asi
+ * que solo hay un indicador. `outline-offset` negativo en `input`/`select`/
+ * `textarea` haria que se comiera el borde propio: por eso ahi se retira del
+ * todo.
  */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/*
+ * Los campos de formulario ya muestran su propio foco (borde + ring del color
+ * del estado). Se les quita el outline global para no duplicar el indicador.
+ *
+ * ## Por que hay que decirlo DOS veces
+ *
+ * `outline: none` en `:focus-visible` no basta: con `accent-color: auto` el
+ * navegador sigue dibujando su anillo de foco nativo (en macOS, naranja/ambar),
+ * que se suma al borde azul del componente. Se veia como un borde azul por
+ * dentro y otro naranja por fuera.
+ *
+ * - `-webkit-focus-ring-color` es la variable que usa WebKit/Blink para ESE
+ *   anillo; pintarla del color del componente lo hace invisible pero conserva el
+ *   grosor, asi que no hay salto de layout.
+ * - `accent-color` se fija al azul de marca para el resto de controles nativos
+ *   (checkbox, radio, range) y deja de depender del acento del sistema.
+ */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/*
+ * El anillo que pinta el NAVEGADOR, no nuestro CSS.
+ *
+ * Con `accent-color: auto` el sistema dibuja su propio indicador de foco (en
+ * macOS, ambar) sobre el campo, y se suma al borde azul del componente: de ahi
+ * el borde azul por dentro y naranja por fuera.
+ *
+ * `-webkit-focus-ring-color: transparent` apaga ese anillo sin romper el
+ * contraste: el campo SIGUE teniendo foco visible, el que pinta el componente
+ * con borde + ring azul.
+ */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  -webkit-focus-ring-color: transparent;
 }

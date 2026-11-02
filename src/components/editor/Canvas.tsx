@@ -52,6 +52,11 @@ interface CanvasProps {
    * esto, el cliente subiria su logo y no lo veria en el editor.
    */
   logoUrl?: string | null;
+  /**
+   * Nombre del negocio, junto al logo. Dato del SITIO, igual que el logo: asi
+   * el lienzo muestra lo mismo que la web publicada.
+   */
+  siteName?: string | null;
 }
 
 function SortableBlock({
@@ -62,6 +67,7 @@ function SortableBlock({
   onResetBlock,
   onFocusField,
   logoUrl,
+  siteName,
 }: {
   block: BlockInstance;
   isSelected: boolean;
@@ -70,6 +76,8 @@ function SortableBlock({
   onResetBlock: (id: string) => void;
   onFocusField: (fieldKey: string | null) => void;
   logoUrl?: string | null;
+  /** Nombre del negocio, junto al logo en las cabeceras. */
+  siteName?: string | null;
 }) {
   const {
     attributes,
@@ -291,7 +299,7 @@ function SortableBlock({
         // bloque, y el cliente no lo edita aqui. Si fuera entre las props, un
         // `logoUrl` guardado en el bloque (de una version vieja) lo pisaria.
         {...(HEADER_BLOCKS.has(block.metaName)
-          ? { logoUrl: logoUrl ?? undefined }
+          ? { logoUrl: logoUrl ?? undefined, brandName: siteName ?? undefined }
           : {})}
       />
 

@@ -17,10 +17,17 @@ const STEPS = [
  *
  * Va en una lista ordenada con `aria-current` en el paso activo: un lector de
  * pantalla anuncia "paso 2 de 3" sin depender de los colores.
+ *
+ * ## Sin margen inferior propio
+ *
+ * Antes llevaba `mb-8`, y el contenedor de `page.tsx` añadia su `space-y-6`
+ * encima: se sumaban 32 + 24 = 56 px de hueco entre el stepper y el formulario,
+ * que es el espacio muerto que se veia. El ritmo vertical lo decide el
+ * contenedor, no cada hijo.
  */
 export function RegisterProgress({ currentStep }: RegisterProgressProps) {
   return (
-    <ol className="mb-8 flex items-center justify-center gap-2">
+    <ol className="flex items-center justify-center gap-2">
       {STEPS.map((step, index) => {
         const isDone = step.id < currentStep;
         const isCurrent = step.id === currentStep;
