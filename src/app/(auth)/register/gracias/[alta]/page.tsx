@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 
 import { getErrorMessage } from "@/lib/api/errors";
 import {
-  getPendingRegistration,
+  getPendingRegistrationStatus,
   syncPendingRegistration,
   type PendingRegistrationStatus,
 } from "@/lib/api/registration";
@@ -101,7 +101,7 @@ export default function RegisterThanksPage() {
     if (!pendingId) return;
 
     try {
-      const result = await getPendingRegistration(pendingId);
+      const result = await getPendingRegistrationStatus(pendingId);
       setStatus(result);
       setNetworkError(false);
       return result;
