@@ -79,6 +79,14 @@ const CONTACT_FORMS = new Set([
   "ContactForm",
   "AppointmentForm",
   "AppointmentSection",
+  /**
+   * Reserva de barber: lleva un `AppointmentForm` dentro.
+   *
+   * Faltaba en esta lista, asi que el formulario del vertical se quedaba en
+   * modo diseno **tambien en la vista previa**: el boton salia deshabilitado y
+   * no habia forma de probar el envio antes de publicar.
+   */
+  "BarberAppointmentSection",
 ]);
 
 /**

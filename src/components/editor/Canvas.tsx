@@ -21,9 +21,16 @@ import { RotateCcw } from "lucide-react";
 
 import { ALL_BLOCKS_MAP, HEADER_BLOCKS, getDefaultPropsForOrganism, isUtilityBlock } from "@/lib/editor-registry";
 import { CONNECTED_ORGANISMS } from "./connected-organisms";
+import { PlanLockedPlaceholder } from "./PlanLockedPlaceholder";
 import { UtilityLayer } from "./UtilityLayer";
 import { useSitePaletteTokens } from "@/components/SiteThemeProvider";
-import { paletteCssVariables } from "@multitenant/design-system";
+import {
+  BLOCK_MIN_PLAN,
+  PLAN_LABELS,
+  isBlockLockedForPlan,
+  paletteCssVariables,
+} from "@multitenant/design-system";
+import type { Plan } from "@multitenant/design-system";
 import { BlockInstance } from "@/types/editor-state";
 import { ViewportMode } from "./ViewportSelector";
 import { pathToLocationKey, resolveFieldPath } from "@/utils/field-resolver";
@@ -57,6 +64,15 @@ interface CanvasProps {
    * el lienzo muestra lo mismo que la web publicada.
    */
   siteName?: string | null;
+  /**
+   * Plan del tenant, para senalar los bloques que no puede usar.
+   *
+   * Los que no alcanza se pintan como aviso, no como contenido: sus props son
+   * de MUESTRA y mostrarlas haria creer que la seccion ya funciona.
+   */
+  plan?: Plan;
+  /** A donde ir para ver los planes (el aviso tiene un enlace). */
+  plansHref: string;
 }
 
 function SortableBlock({
@@ -68,6 +84,8 @@ function SortableBlock({
   onFocusField,
   logoUrl,
   siteName,
+  plan,
+  plansHref,
 }: {
   block: BlockInstance;
   isSelected: boolean;
@@ -78,6 +96,8 @@ function SortableBlock({
   logoUrl?: string | null;
   /** Nombre del negocio, junto al logo en las cabeceras. */
   siteName?: string | null;
+  plan?: Plan;
+  plansHref: string;
 }) {
   const {
     attributes,
@@ -195,6 +215,45 @@ function SortableBlock({
 
   const registryEntry = ALL_BLOCKS_MAP.get(block.metaName);
   if (!registryEntry) return null;
+
+  /**
+   * Plan insuficiente: se corta ANTES de montar el componente.
+   *
+   * ## Por que se ve, en vez de desaparecer
+   *
+   * El bloque llego al lienzo con permisos (o desde una plantilla) y ahora el
+   * plan no alcanza. Ocultarlo sin mas dejaria un hueco que el cliente no
+   * entiende ni sabe como arreglar. Aqui lo ve, lee el motivo y lo quita en un
+   * clic.
+   *
+   * ## Y por que NO se pinta el componente
+   *
+   * Sus props son contenido de MUESTRA (productos de ejemplo de la plantilla).
+   * Pintarlo haria creer que la seccion ya funciona y que vende esas cosas: al
+   * publicar no sale nada, porque el backend filtra el bloque.
+   */
+  if (isBlockLockedForPlan(block.metaName, plan)) {
+    const required = BLOCK_MIN_PLAN[block.metaName];
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`relative rounded-none transition-all ${
+          isSelected
+            ? "ring-2 ring-amber-400 z-10"
+            : "hover:ring-1 hover:ring-stone-700"
+        }`}
+      >
+        <PlanLockedPlaceholder
+          displayName={registryEntry.meta.displayName}
+          requiredPlanLabel={PLAN_LABELS[required] ?? required}
+          plansHref={plansHref}
+          onRemove={() => onDeleteBlock(block.id)}
+        />
+      </div>
+    );
+  }
 
   // Algunos organismos necesitan logica de cliente (la agenda habla con la
   // API). Si existe una version conectada, esa gana sobre la del design system.
@@ -345,6 +404,9 @@ export function Canvas({
   palette,
   siteType,
   logoUrl,
+  siteName,
+  plan,
+  plansHref,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -396,6 +458,17 @@ export function Canvas({
       ref={containerRef}
       className="relative min-h-0 flex-1 overflow-y-auto bg-stone-950 p-8 flex justify-center items-start"
     >
+      {/*
+        Escritorio a 1440px, no a 1024.
+
+        `max-w-5xl` son 1024px y, con el `p-8` del contenedor, el lienzo quedaba
+        en 928. Las plantillas estan diseñadas a 1440 (es el ancho al que se
+        midieron todos los estilos), y a 928 el hero bajaba su titular de 2 a 3
+        lineas, el menu de la cabecera se partia en dos filas y el logo se
+        recortaba. No era un fallo del organismo: era el lienzo.
+
+        El zoom sigue disponible para pantallas donde 1440 no quepa.
+      */}
       <div
         style={{
           transform: `scale(${zoom})`,
@@ -412,7 +485,7 @@ export function Canvas({
         className={`w-full flex flex-col gap-0 ${
           viewportMode === "mobile"
             ? "max-w-[375px] border-4 border-stone-800 rounded-[2.5rem] overflow-hidden shadow-2xl my-4"
-            : "max-w-5xl overflow-hidden shadow-2xl"
+            : "max-w-[1440px] overflow-hidden shadow-2xl"
         }`}
       >
         <DndContext
@@ -434,6 +507,9 @@ export function Canvas({
                 onResetBlock={onResetBlock}
                 onFocusField={onFocusField}
                 logoUrl={logoUrl}
+                siteName={siteName}
+                plan={plan}
+                plansHref={plansHref}
               />
             ))}
           </SortableContext>

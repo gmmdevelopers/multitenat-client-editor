@@ -975,6 +975,8 @@ export default function PageBuilderPage() {
           siteType={siteType}
           logoUrl={siteIconUrl}
           siteName={siteName}
+          plan={tenantPlan}
+          plansHref={`/site/${ownerSlug}/settings#plan`}
         />
 
         {/* Sidebar Derecho */}
