@@ -206,13 +206,19 @@ export interface TemplateGroup {
  * El tenant es AGNOSTICO al vertical: ve todos los templates (medical,
  * skincare, tienda...) y elige el que quiera. `siteTypes` solo categoriza,
  * no restringe. Lo unico que filtra es el plan contratado.
+ *
+ * `siteType` es un filtro de NAVEGACION opcional, igual que los tabs de
+ * organismos: acota la lista para que no sea un muro, pero no prohibe nada.
+ * Sin el, se devuelven todos los verticales.
  */
 export function getTemplateGroups(options: {
   plan: Plan;
+  siteType?: SiteType;
 }): TemplateGroup[] {
   const pages = getRegistryComponents({
     category: "pages",
     plan: options.plan,
+    siteType: options.siteType,
   }).filter((entry) => (entry.meta.templateBlocks?.length ?? 0) > 0);
 
   const byKind = new Map<PageKind, ComponentRegistryEntry[]>();
@@ -230,6 +236,32 @@ export function getTemplateGroups(options: {
     label: PAGE_KIND_LABELS[kind],
     templates: byKind.get(kind) ?? [],
   }));
+}
+
+/**
+ * Cuantas plantillas tiene cada vertical, para el contador de los tabs.
+ *
+ * Se cuenta sobre las plantillas REALES (con `templateBlocks`), no sobre los
+ * metas de categoria `pages`: hay paginas compuestas que no son plantillas y
+ * el contador diria un numero que luego no aparece en la lista.
+ */
+export function getTemplateCountsBySiteType(options: {
+  plan: Plan;
+}): Record<SiteType | "all", number> {
+  const templates = getRegistryComponents({
+    category: "pages",
+    plan: options.plan,
+  }).filter((entry) => (entry.meta.templateBlocks?.length ?? 0) > 0);
+
+  const counts = { all: templates.length } as Record<SiteType | "all", number>;
+
+  for (const siteType of SITE_TYPES) {
+    counts[siteType] = templates.filter((entry) =>
+      entry.meta.siteTypes?.includes(siteType),
+    ).length;
+  }
+
+  return counts;
 }
 
 /** Convierte la plantilla de una pagina en bloques listos para el canvas. */

@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, LayoutTemplate } from "lucide-react";
 import type { ComponentRegistryEntry, PageKind, Plan } from "@multitenant/design-system";
 
-import { getTemplateGroups } from "@/lib/editor-registry";
+import { OrganismTabs } from "@/components/editor/OrganismTabs";
+import type { OrganismTab } from "@/components/editor/OrganismTabs";
+import {
+  getTemplateCountsBySiteType,
+  getTemplateGroups,
+} from "@/lib/editor-registry";
 
 interface TemplateGalleryProps {
   plan: Plan;
@@ -21,6 +26,16 @@ interface TemplateGalleryProps {
  * Los templates se agrupan por `pageKind` (Inicio, Servicios, Agenda...) para
  * que la lista no se vuelva un muro de opciones. Cada plantilla ofrece las dos
  * acciones: reemplazar el contenido actual o crear una pagina nueva.
+ *
+ * ## Tabs de vertical
+ *
+ * Los mismos tabs que la pestana de Secciones (`OrganismTabs`), para que las dos
+ * listas se naveguen igual. Son un filtro de NAVEGACION: acotan la lista, no
+ * prohiben usar una plantilla de otro vertical.
+ *
+ * El tab vive aqui y no en la pagina del editor a proposito: es estado de ESTA
+ * lista. Compartirlo con Secciones haria que filtrar plantillas por "Barber"
+ * cambiara tambien los organismos, que es otra cosa.
  */
 export function TemplateGallery({
   plan,
@@ -28,11 +43,41 @@ export function TemplateGallery({
   onCreatePage,
   busy = false,
 }: TemplateGalleryProps) {
-  const groups = useMemo(() => getTemplateGroups({ plan }), [plan]);
+  const [activeTab, setActiveTab] = useState<OrganismTab>("all");
 
-  const [openKinds, setOpenKinds] = useState<PageKind[]>(
+  const groups = useMemo(
+    () =>
+      getTemplateGroups({
+        plan,
+        siteType: activeTab === "all" ? undefined : activeTab,
+      }),
+    [plan, activeTab],
+  );
+
+  const counts = useMemo(() => getTemplateCountsBySiteType({ plan }), [plan]);
+
+  /*
+   * Al cambiar de tab se abre el primer grupo del resultado. Si se conservara
+   * el estado anterior, un vertical con otro `pageKind` (p. ej. solo "Inicio")
+   * apareceria con todos los grupos cerrados y pareceria vacio.
+   *
+   * Se hace en el handler del tab y no comparando `lastTab` durante el render:
+   * llamar a `setState` en el cuerpo del componente provoca un render extra y
+   * React lo desaconseja.
+   */
+  const [openKinds, setOpenKinds] = useState<PageKind[]>(() =>
     groups.length ? [groups[0].kind] : [],
   );
+
+  const handleTabChange = (tab: OrganismTab) => {
+    setActiveTab(tab);
+
+    const next = getTemplateGroups({
+      plan,
+      siteType: tab === "all" ? undefined : tab,
+    });
+    setOpenKinds(next.length ? [next[0].kind] : []);
+  };
 
   const toggle = (kind: PageKind) => {
     setOpenKinds((current) =>
@@ -42,20 +87,22 @@ export function TemplateGallery({
     );
   };
 
-  if (!groups.length) {
-    return (
-      <p className="rounded-xl border-dashed border-stone-800 p-4 text-center text-[11px] text-stone-500">
-        No hay plantillas disponibles para tu plan actual.
-      </p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-2">
       <p className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-stone-500">
         <LayoutTemplate className="h-3.5 w-3.5" />
         Armar desde template
       </p>
+
+      <OrganismTabs active={activeTab} onChange={handleTabChange} counts={counts} />
+
+      {!groups.length ? (
+        <p className="rounded-xl border-dashed border-stone-800 p-4 text-center text-[11px] text-stone-500">
+          {activeTab === "all"
+            ? "No hay plantillas disponibles para tu plan actual."
+            : "Este vertical no tiene plantillas en tu plan actual."}
+        </p>
+      ) : null}
 
       {groups.map((group) => {
         const isOpen = openKinds.includes(group.kind);
