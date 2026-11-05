@@ -72,6 +72,8 @@ export const HEADER_BLOCKS = new Set<string>([
   "MedicalHeader",
   "DentistHeader",
   "SkincareHeader",
+  "BarberHeader",
+  "MassageHeader",
   "InteractiveSiteHeader",
   "SiteHeader",
 ]);
