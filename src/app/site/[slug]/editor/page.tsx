@@ -37,7 +37,7 @@ import {
   saveDraftBlocks,
   updatePage,
 } from "@/lib/api/pages";
-import { getSiteHomePage, setSitePublished } from "@/lib/api/sites";
+import { getSiteHomePage, setSitePublished, updateSite } from "@/lib/api/sites";
 import { useEmailVerification } from "@/hooks/useEmailVerification";
 import { PagesPanel } from "@/components/editor/PagesPanel";
 import { DeletePageModal } from "@/components/editor/DeletePageModal";
@@ -45,7 +45,7 @@ import { CreatePageModal } from "@/components/editor/CreatePageModal";
 import type { PageSummary } from "@/types/site";
 import { ViewportMode } from "@/components/editor/ViewportSelector";
 import { storePreviewPalette } from "@/lib/preview-palette";
-import type { CustomPalette } from "@multitenant/design-system";
+import { paletteFromSiteType, type CustomPalette } from "@multitenant/design-system";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage } from "@/lib/api/errors";
 
@@ -488,6 +488,20 @@ export default function PageBuilderPage() {
   /**
    * Carga una plantilla reemplazando los bloques del canvas actual.
    * No guarda: el usuario revisa y decide si guarda o publica.
+   *
+   * ## La paleta se materializa aqui
+   *
+   * Mientras el sitio no tenga paleta propia, los colores salen del vertical
+   * (`siteType`). Eso dejaba dos huecos:
+   *
+   *   - un sitio armado a mano, sin plantilla, no tiene vertical y caia en el
+   *     color de respaldo aunque sus organismos fueran de otro vertical;
+   *   - al cambiar de plantilla, los colores cambiaban POR DEBAJO del cliente,
+   *     sin que el hubiera elegido nada.
+   *
+   * Al aplicar una plantilla se COPIA su paleta a `settings.palette`: a partir
+   * de ahi el sitio tiene colores propios y editables, y cambiar de plantilla
+   * ya solo afecta a la semilla si el cliente la vuelve a aplicar.
    */
   function handleApplyTemplate(entry: ComponentRegistryEntry) {
     const blocks = templateToBlocks(entry);
@@ -502,9 +516,50 @@ export default function PageBuilderPage() {
     templateAppliedRef.current = true;
     loadBlocks(blocks);
     setPageTitle(entry.meta.displayName);
+
+    /*
+     * La paleta se adelanta en el lienzo y se guarda en el sitio. Si la
+     * plantilla no declara vertical, no se toca la que el cliente ya tenia:
+     * aplicar una plantilla sin paleta no debe borrar sus colores.
+     */
+    const suggested = paletteFromSiteType(entry.meta.siteTypes?.[0]);
+    if (suggested) {
+      handlePreviewPalette(suggested);
+      void saveSitePalette({
+        palette: suggested,
+        siteType: entry.meta.siteTypes?.[0] ?? null,
+      });
+    }
+
     toast.success(
       `Plantilla "${entry.meta.displayName}" cargada (${blocks.length} secciones)`,
     );
+  }
+
+  /**
+   * Guarda la paleta materializada sin bloquear la UI.
+   *
+   * Un fallo aqui no debe impedir cargar la plantilla: el cliente ya la ve en el
+   * lienzo y puede guardar la paleta a mano desde el panel. Se avisa y sigue.
+   */
+  async function saveSitePalette(payload: {
+    palette: CustomPalette;
+    siteType: string | null;
+  }) {
+    if (!activeSiteId) return;
+
+    try {
+      await updateSite(activeSiteId, {
+        settings: { palette: payload.palette, siteType: payload.siteType },
+      });
+    } catch (err) {
+      toast.error(
+        getErrorMessage(
+          err,
+          "La plantilla se cargo, pero no se pudo guardar su paleta.",
+        ),
+      );
+    }
   }
 
   /**
