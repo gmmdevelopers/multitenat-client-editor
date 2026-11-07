@@ -184,8 +184,39 @@ export function PropertiesPanel({
 
   const handleAddArrayItem = (propName: string) => {
     const currentArray = [...(props[propName] || [])];
-    const templateItem =
-      currentArray.length > 0 && typeof currentArray[0] === "object"
+
+    /*
+     * La forma del item nuevo sale del `itemFields` del META, no del primer
+     * item de la lista.
+     *
+     * Copiar las claves del primero fallaba en cuanto los items no eran
+     * homogéneos: en el menú del header, "Home" no tiene `children`, así que
+     * cada entrada añadida nacía sin submenú y no había forma de crearlo desde
+     * el panel. Con el meta, el item nuevo trae todas las claves declaradas
+     * (incluidas las listas anidadas, que nacen vacías).
+     */
+    const itemFields = fieldDefs.get(propName)?.itemFields;
+
+    const templateItem = itemFields?.length
+      ? itemFields.reduce(
+          (acc, field) => {
+            acc[field.name] =
+              field.control === "list"
+                ? []
+                : field.control === "toggle"
+                  ? false
+                  : field.control === "number"
+                    ? 0
+                    : isIconProp(field.name)
+                      ? "Heart"
+                      : isLinkProp(field.name)
+                        ? "#"
+                        : "";
+            return acc;
+          },
+          {} as Record<string, any>,
+        )
+      : currentArray.length > 0 && typeof currentArray[0] === "object"
         ? Object.keys(currentArray[0]).reduce(
             (acc, key) => {
               acc[key] = isIconProp(key) ? "Heart" : isLinkProp(key) ? "#" : "";
@@ -585,7 +616,16 @@ export function PropertiesPanel({
    */
   const fieldDefs = new Map<
     string,
-    { control?: string; options?: { label: string; value: string }[] }
+    {
+      control?: string;
+      options?: { label: string; value: string }[];
+      /** Campos de cada item, para crear items nuevos con la forma correcta. */
+      itemFields?: readonly {
+        name: string;
+        label: string;
+        control?: string;
+      }[];
+    }
   >();
   const meta = registryEntry?.meta;
 
@@ -596,6 +636,11 @@ export function PropertiesPanel({
           label: string;
           control?: string;
           options?: { label: string; value: string }[];
+          itemFields?: readonly {
+            name: string;
+            label: string;
+            control?: string;
+          }[];
         }[]
       | undefined,
   ) => {
@@ -604,6 +649,7 @@ export function PropertiesPanel({
       fieldDefs.set(field.name, {
         control: field.control,
         options: field.options,
+        itemFields: field.itemFields,
       });
     }
   };
