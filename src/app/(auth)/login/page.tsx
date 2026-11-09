@@ -1,13 +1,75 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { getErrorMessage, getErrorCode } from "@/lib/api/errors";
 
+/**
+ * Página de login.
+ *
+ * El formulario va dentro de un `<Suspense>` porque usa `useSearchParams()`.
+ *
+ * ## Por qué
+ *
+ * Next 16 prerenderiza las páginas estáticas en tiempo de build. `useSearchParams`
+ * obliga a leer la URL, y durante el prerender no hay URL: sin un límite de
+ * Suspense, el build falla con
+ *
+ *     useSearchParams() should be wrapped in a suspense boundary at page "/login"
+ *
+ * y el deploy se cae. Con el `<Suspense>` Next renderiza el *fallback* en el
+ * build y el formulario real en el cliente, que es cuando la URL ya existe.
+ *
+ * El fallback no es una pantalla en blanco: mientras se resuelve, se pinta la
+ * misma tarjeta con la estructura del formulario, así no hay salto visual.
+ */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginSkeleton />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+/** Esqueleto con la forma de la tarjeta, para el prerender. */
+function LoginSkeleton() {
+  return (
+    <div className="relative w-full max-w-md shrink-0 self-start">
+      <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/80 shadow-2xl backdrop-blur">
+        <div
+          aria-hidden
+          className="h-px bg-gradient-to-r from-transparent via-blue-500/60 to-transparent"
+        />
+        <div className="p-8">
+          <div className="mb-7 text-center">
+            <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-gray-800 bg-gray-950">
+              <span aria-hidden className="text-base text-blue-400">
+                ◆
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Iniciar sesión
+            </h1>
+            <p className="mt-1.5 text-sm text-gray-400">
+              Entra al panel de tu negocio
+            </p>
+          </div>
+          <div aria-hidden className="space-y-5">
+            <div className="h-[68px] rounded-lg bg-gray-800/40" />
+            <div className="h-[68px] rounded-lg bg-gray-800/40" />
+            <div className="h-[68px] rounded-lg bg-gray-800/40" />
+            <div className="h-11 rounded-lg bg-gray-800/60" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginForm() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
   const toast = useToast();
