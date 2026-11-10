@@ -121,57 +121,31 @@ export default function RegisterPage() {
       );
 
       /*
-       * Se navega al CHECKOUT PROPIO (`pay.<dominio>`), no al de Mercado Pago.
+       * Se navega a la URL que devuelve el BACKEND, sea cual sea el proveedor.
        *
-       * ## Por que
+       * ## Por que ya no se compone aqui
        *
-       * El checkout hospedado de MP cobra el monto del PLAN y no acepta uno por
-       * peticion: los cupones dinamicos (X% por N meses) no caben ahi. El
-       * checkout propio captura la tarjeta con Bricks y manda el monto
-       * calculado en el servidor, y ademas no exige `payer_email`, que es lo que
-       * rompia el caso de un negocio cuyo correo no es su cuenta de MP.
+       * Antes se armaba `pay.<dominio>/pago/<alta>?plan=...` a mano, porque el
+       * checkout era nuestro (Bricks). Con Transbank Oneclick Mall **la pantalla
+       * de inscripción es de Transbank**: la unica URL valida es la que devuelve
+       * `start()`, y no se puede deducir del dominio.
        *
-       * ## De donde sale la URL
+       * Con Mercado Pago, `initPoint` es su checkout hospedado. En los dos casos
+       * el backend ya devuelve la URL correcta, asi que el front solo navega.
        *
-       * `NEXT_PUBLIC_CHECKOUT_URL` si esta definida; si no, se compone como
-       * `pay.<dominio-base>`. El dominio base sale de `NEXT_PUBLIC_APP_DOMAIN`
-       * o de la URL actual, quitando el prefijo `app.`.
-       *
-       * Si la URL quedara mal, el cliente acaba en un host que no responde. Por
-       * eso conviene definir la variable en el build en vez de confiar en la
-       * deduccion.
+       * Ventaja adicional: cambiar de proveedor no vuelve a tocar el registro.
        */
-      /*
-       * El dominio base sale de la URL actual o de `NEXT_PUBLIC_APP_DOMAIN`.
-       *
-       * `app.multitenant.cl` -> `multitenant.cl`: se quita el primer segmento
-       * solo si es `app`, que es donde vive el panel. En `localhost:3001` se
-       * mantiene el host tal cual, para que el desarrollo apunte a un checkout
-       * local (`pay.localhost:3003`).
-       */
-      const appDomain =
-        process.env.NEXT_PUBLIC_APP_DOMAIN ?? window.location.hostname;
-      const baseDomain = appDomain.replace(/^app\./, "");
-      const checkoutProtocol =
-        process.env.NODE_ENV === "production" ? "https:" : window.location.protocol;
+      if (!checkout.initPoint) {
+        // Sin URL de pago no hay forma de que el cliente autorice. Se trata como
+        // error en vez de redirigir a un string vacio.
+        throw new Error(
+          "El pago no devolvio una direccion a la que ir. Intenta de nuevo.",
+        );
+      }
 
-      const checkoutUrl =
-        process.env.NEXT_PUBLIC_CHECKOUT_URL ??
-        `${checkoutProtocol}//pay.${baseDomain}`;
-
-      /*
-       * El alta puede estar ya pagada (el cliente vuelve al registro). El
-       * checkout propio lo detecta y muestra el estado; no hace falta
-       * comprobarlo aqui.
-       */
-      void checkout;
-
-      // Dominio externo: se navega con `location.href`, no con el router de Next.
-      window.location.href = `${checkoutUrl}/pago/${encodeURIComponent(
-        currentPendingId,
-      )}?plan=${encodeURIComponent(
-        draft.requestedPlan,
-      )}&amount=${checkout.amountInPesos ?? ""}`;
+      // Dominio externo (Transbank o Mercado Pago): se navega con
+      // `location.href` y no con el router de Next.
+      window.location.href = checkout.initPoint;
     } catch (error) {
       setSubmitError(
         getErrorMessage(
