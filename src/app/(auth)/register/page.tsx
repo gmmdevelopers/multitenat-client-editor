@@ -143,9 +143,40 @@ export default function RegisterPage() {
         );
       }
 
-      // Dominio externo (Transbank o Mercado Pago): se navega con
-      // `location.href` y no con el router de Next.
-      window.location.href = checkout.initPoint;
+      /*
+       * Se pasa por `/pago`, un puente que decide GET o POST.
+       *
+       * ## Por qué no se navega directo
+       *
+       * Transbank Oneclick Mall espera un **POST** con `token_ws` para abrir la
+       * pantalla de inscripción. Un `location.href` (GET) devuelve una **página
+       * en blanco**, sin error.
+       *
+       * Mercado Pago acepta GET. El puente hace POST con formulario cuando hace
+       * falta y navega directo cuando no, así que aquí no hay que saber qué
+       * proveedor está activo.
+       */
+      const pagoUrl = new URL("/pago", window.location.origin);
+      pagoUrl.searchParams.set("url", checkout.initPoint);
+
+      /*
+       * El token de Transbank viaja separado: `initPoint` lo lleva en la query
+       * (`?token_ws=...`) y el puente lo necesita como campo del formulario.
+       *
+       * El campo se llama **`TBK_TOKEN`**, no `token_ws`: comprobado contra el
+       * sandbox. Con `token_ws` el `.cgi` devuelve un formulario incompleto y la
+       * pantalla queda en blanco; `token_ws` es el campo del RETORNO, no el de
+       * la entrada.
+       */
+      const tokenWs = new URL(checkout.initPoint).searchParams.get("token_ws");
+
+      if (tokenWs) {
+        pagoUrl.searchParams.set("token", tokenWs);
+        pagoUrl.searchParams.set("field", "TBK_TOKEN");
+        pagoUrl.searchParams.set("method", "POST");
+      }
+
+      window.location.href = pagoUrl.toString();
     } catch (error) {
       setSubmitError(
         getErrorMessage(
