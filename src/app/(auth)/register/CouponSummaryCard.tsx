@@ -56,7 +56,9 @@ export function CouponSummaryCard({
         {/* Plan y precio de lista */}
         <div className="flex items-baseline justify-between gap-4">
           <dt className="text-gray-400">{planDisplayName}</dt>
-          <dd className="text-gray-300">{clp.format(coupon.planAmount)} / mes</dd>
+          <dd className="text-gray-300">
+            {clp.format(coupon.planAmount)} / mes
+          </dd>
         </div>
 
         {/* Lo que paga hoy */}
@@ -115,7 +117,9 @@ export function CouponSummaryCard({
         ) : hasDiscount && !isFreeAccess ? (
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-gray-400">Después</dt>
-            <dd className="text-gray-200">Sin cambios (descuento permanente)</dd>
+            <dd className="text-gray-200">
+              Sin cambios (descuento permanente)
+            </dd>
           </div>
         ) : null}
 
@@ -131,8 +135,8 @@ export function CouponSummaryCard({
 
       {!isFreeAccess ? (
         <p className="mt-3 border-t border-emerald-900/60 pt-3 text-[11px] leading-relaxed text-gray-500">
-          El cobro es mensual y puedes cancelar cuando quieras desde tu panel. Los
-          montos no cambian sin aviso.
+          El cobro es mensual y puedes cancelar cuando quieras desde tu panel.
+          Los montos no cambian sin aviso.
         </p>
       ) : null}
     </div>

@@ -297,17 +297,49 @@ export function StepPlan({
         })}
       </div>
 
-      <div className="rounded-lg border border-gray-800 bg-gray-950 p-3 text-[11px] text-gray-400">
-        <p>
-          Empezaras en el plan{" "}
-          <span className="font-semibold text-gray-300">Basic</span> y se
-          activara{" "}
-          <span className="font-semibold text-gray-300">
-            {plans.find((p) => p.key === draft.requestedPlan)?.displayName ??
-              "el que elijas"}
-          </span>{" "}
-          cuando se confirme el pago.
-        </p>
+      {/*
+        * Explicacion del cobro y de la prueba.
+        *
+        * ## Que decia antes y por que cambia
+        *
+        * El bloque anterior avisaba "empezaras en el plan Basic" y no mencionaba
+        * la prueba. Las dos cosas estaban mal: el cliente entra directo al plan
+        * que elige, y tiene 7 dias gratis que el texto no contaba. Un cliente que
+        * no sabe que tiene prueba teme que se le cobre al instante.
+        *
+        * ## El mensaje depende de si hay cupon
+        *
+        * Un cupon y la prueba son EXCLUYENTES: quien trae codigo ya recibe un
+        * beneficio. Decirle "tienes 7 dias gratis" con un cupon aplicado seria
+        * prometerle dos cosas cuando solo recibe una.
+        */}
+      <div className="rounded-lg border border-gray-800 bg-gray-950 p-3 text-[11px] leading-relaxed text-gray-400">
+        {hasCoupon ? (
+          <>
+            <p className="font-medium text-gray-300">
+              Tu cupon reemplaza la prueba gratuita
+            </p>
+            <p className="mt-1">
+              Los cupones y los 7 dias de prueba no se acumulan: con un codigo
+              empiezas a pagar la tarifa de la campana desde el primer cobro.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="font-medium text-gray-300">
+              7 dias gratis para probar
+            </p>
+            <p className="mt-1">
+              Ingresas al plan{" "}
+              <span className="font-semibold text-gray-300">
+                {plans.find((p) => p.key === draft.requestedPlan)?.displayName ??
+                  "que elijas"}
+              </span>{" "}
+              hoy mismo y no se te cobra nada durante la primera semana. La
+              suscripcion empieza despues de esos 7 dias.
+            </p>
+          </>
+        )}
       </div>
 
       <Field
