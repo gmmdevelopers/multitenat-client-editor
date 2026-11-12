@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { CouponNoticeBanner } from "@/components/CouponNoticeBanner";
 import { ProfessionalAppNotice } from "@/components/ProfessionalAppNotice";
 import { adminHomePath, mustUseMobileApp } from "@/lib/role-routing";
 
@@ -104,6 +105,10 @@ export default function DashboardLayout({
       {/* Aviso de correo sin confirmar. Va arriba del todo para que aparezca en
           todas las pantallas del panel sin que cada una deba incluirlo. */}
       <EmailVerificationBanner />
+      {/* Aviso del cupon: cuanto le queda y cuanto pagara despues. Va aqui para
+          que el cliente lo vea en cualquier pantalla del panel, igual que el
+          aviso del correo. */}
+      <CouponNoticeBanner />
 
       {/*
         `min-h-0` + `flex-1` son lo que permite que el hijo encoja dentro del
