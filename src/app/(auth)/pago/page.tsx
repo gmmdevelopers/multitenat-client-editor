@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { logStep, logWarn } from "@/lib/registration-log";
+
 /**
  * Puente hacia la pasarela de pago.
  *
@@ -58,14 +60,27 @@ function PagoBridge() {
   const method = (params.get("method") ?? "GET").toUpperCase();
 
   useEffect(() => {
+    logStep("puente /pago", {
+      metodo: method,
+      campo: field,
+      token: token ? "si" : "NO",
+      url,
+    });
+
     if (!url) {
+      logWarn("puente /pago SIN url: no hay a donde ir");
       setError("No recibimos la dirección de pago. Vuelve a iniciar el registro.");
       return;
     }
 
     if (method === "GET") {
+      logWarn("puente /pago con GET: Webpay mostraria una pagina en blanco");
       window.location.href = url;
       return;
+    }
+
+    if (!token) {
+      logWarn("puente /pago sin token: el formulario POST iria vacio");
     }
 
     /*
@@ -76,8 +91,9 @@ function PagoBridge() {
      * HTML con su propio `<form>` de autoenvío y su `<script>` que llama a
      * `submit()`.
      */
+    logStep("puente /pago: enviando el formulario POST");
     formRef.current?.submit();
-  }, [method, url]);
+  }, [field, method, token, url]);
 
   if (error) {
     return (

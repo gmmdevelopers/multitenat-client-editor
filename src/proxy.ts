@@ -121,16 +121,27 @@ export async function proxy(req: NextRequest) {
      *
      * `verify-email` sigue protegido a proposito: su enlace lleva el token, que
      * es la credencial real, y sin el cae en `/login` igual.
+     *
+     * ## `/pago` tiene que ser publica
+     *
+     * Es el puente que hace el POST a Webpay. Quien llega ahi es un cliente que
+     * se acaba de registrar y **todavia no tiene sesion** (la cuenta se crea en
+     * el retorno de Transbank). Sin esta ruta en la lista, el proxy lo redirige
+     * a `/login` y el pago nunca se abre: el sintoma exacto era "pulso pagar y
+     * me manda al login".
+     *
+     * No expone nada: la pagina solo lee `url` y `token` de la query y hace el
+     * POST. Un token de inscripcion es de un solo uso y no identifica a nadie.
      */
-    const PUBLIC_PATHS = new Set(["/login", "/register"]);
+    const PUBLIC_PATHS = new Set(["/login", "/register", "/pago"]);
 
     /**
      * Rutas publicas por prefijo, no por igualdad exacta.
      *
-     * `/register/gracias/<alta>` lleva el id en el PATH: Mercado Pago añade sus
-     * propios parametros al volver (`?preapproval_id=...`), y si el id fuera una
-     * query el `?` de MP acababa codificado y el id llegaba contaminado
-     * (`abc%3Fpreapproval_id%3D...`), lo que provocaba un 404 al consultarlo.
+     * `/register/gracias/<alta>` lleva el id en el PATH: la pasarela añade sus
+     * propios parametros al volver, y si el id fuera una query el `?` acababa
+     * codificado y el id llegaba contaminado (`abc%3Ftoken_ws%3D...`), lo que
+     * provocaba un 404 al consultarlo.
      *
      * Con una lista de rutas exactas, esas URLs caian en el redirect al login y
      * el cliente perdia de vista su registro justo despues de pagar.

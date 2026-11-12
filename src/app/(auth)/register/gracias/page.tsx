@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { persistToken } from "@/context/AuthContext";
+import { logStep, logWarn, redact } from "@/lib/registration-log";
 
 /**
  * Vuelta del pago con AUTOLOGIN.
@@ -37,12 +38,22 @@ function ThanksPage() {
     const token = params.get("token");
     const pago = params.get("pago");
 
+    logStep("vuelta del pago", {
+      pago: pago ?? "(sin parametro)",
+      token: redact(token),
+    });
+
     if (token) {
       persistToken(token);
+      logStep("autologin: sesion guardada, entrando al panel");
       // `replace` para que el botón "atrás" no vuelva a esta URL con el token.
       router.replace("/");
       return;
     }
+
+    logWarn("vuelta del pago SIN token: se manda al login", {
+      motivo: pago ?? "desconocido",
+    });
 
     if (pago === "cancelado") {
       router.replace("/login?pago=cancelado");

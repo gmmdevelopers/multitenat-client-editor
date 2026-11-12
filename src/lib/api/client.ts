@@ -28,7 +28,63 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+/*
+ * Trazas de las peticiones del registro.
+ *
+ * El registro es el unico flujo que se hace SIN sesion, y cuando falla solo deja
+ * el sintoma ("me manda al login"). El backend ya loguea todo lo que recibe; lo
+ * que faltaba era saber si la peticion llego a salir del navegador, con que
+ * codigo volvio y, cuando fallo, si fue la red o el servidor.
+ *
+ * Se registran solo las rutas del registro: el resto del panel es ruido.
+ */
+const REGISTRO_PATHS = ["/tenants/register", "/billing/checkout/pending"];
+
+function isRegistroRequest(url: string | undefined): boolean {
+  if (!url) return false;
+  return REGISTRO_PATHS.some((path) => url.includes(path));
+}
+
+api.interceptors.response.use(
+  (response) => {
+    if (isRegistroRequest(response.config.url)) {
+      console.log("[registro] API OK", {
+        url: response.config.url,
+        status: response.status,
+        data: JSON.stringify(response.data).slice(0, 400),
+      });
+    }
+    return response;
+  },
+  (error) => {
+    if (isRegistroRequest(error?.config?.url)) {
+      /*
+       * `error.response` vacio significa que la peticion NO llego al servidor:
+       * red caida, CORS o URL equivocada. Sin este campo, el navegador solo dice
+       * "Network Error" y es imposible saber cual de los tres fue.
+       */
+      console.error("[registro] API FALLO", {
+        url: error?.config?.url,
+        baseURL: error?.config?.baseURL,
+        status: error?.response?.status ?? "(sin respuesta: red/CORS)",
+        body: error?.response
+          ? JSON.stringify(error.response.data).slice(0, 400)
+          : String(error?.message),
+      });
+    }
+    return Promise.reject(error);
+  },
+);
+
 api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined" && isRegistroRequest(config.url)) {
+    console.log("[registro] API ->", {
+      metodo: (config.method ?? "get").toUpperCase(),
+      url: `${config.baseURL ?? ""}${config.url ?? ""}`,
+      params: JSON.stringify(config.params ?? {}),
+    });
+  }
+
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("accessToken");
     if (token) {
@@ -41,7 +97,19 @@ api.interceptors.request.use((config) => {
     // tenant del host: la peticion llega desde el navegador a otro dominio. El
     // proxy escribe `x-tenant-slug` como cookie cuando se sirve la web publica
     // de un tenant, y aqui la reenviamos.
-    const tenantSlug = readCookie("x-tenant-slug");
+    //
+    // ## `x-org-slug` antes que `x-tenant-slug`
+    //
+    // Son cosas distintas y la diferencia importa:
+    //
+    // - `x-org-slug` es la organizacion de la SESION: la escribe el login y es
+    //   la que corresponde a `GET /auth/me`.
+    // - `x-tenant-slug` la escribe el proxy para servir la web publica de un
+    //   tenant. Puede ser de una visita anterior y, en `app.<dominio>`, no
+    //   deberia existir: si gana ella, el panel pide datos de OTRO tenant.
+    const orgSlug = readCookie("x-org-slug");
+    const tenantSlug = orgSlug ?? readCookie("x-tenant-slug");
+
     if (tenantSlug && !config.headers["x-tenant-slug"]) {
       config.headers["x-tenant-slug"] = tenantSlug;
     }
