@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { getPlans, type PlanOption } from "@/lib/api/registration";
+import { getErrorMessage } from "@/lib/api/errors";
+import {
+  getPlans,
+  validateCoupon,
+  type CouponDescription,
+  type PlanOption,
+} from "@/lib/api/registration";
 import {
   Field,
   formatClp,
@@ -12,6 +18,7 @@ import {
   secondaryButtonClass,
 } from "./fields";
 import type { RegistrationDraft } from "./registration-utils";
+import { CouponSummaryCard } from "./CouponSummaryCard";
 import { TurnstileWidget } from "@/components/captcha/TurnstileWidget";
 
 interface StepPlanProps {
@@ -46,6 +53,17 @@ export function StepPlan({
   const [plansError, setPlansError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaError, setCaptchaError] = useState<string | null>(null);
+
+  /**
+   * Desglose del cupon ya validado.
+   *
+   * `null` = no se ha validado todavia (o el campo se vacio). Es `null` tambien
+   * cuando hay un error, para que el cliente no vea un resumen viejo mientras
+   * corrige el codigo.
+   */
+  const [couponInfo, setCouponInfo] = useState<CouponDescription | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,12 +118,129 @@ export function StepPlan({
    */
   const handleCouponChange = (value: string) => {
     onChange({ couponCode: value.toUpperCase().replace(/\s/g, "") });
+    // Al editar el codigo, el desglose anterior deja de valer: mostrarlo haria
+    // que el cliente creyera que el nuevo codigo ya se aplico.
+    setCouponInfo(null);
+    setCouponError(null);
   };
+
+  /**
+   * Valida el cupon contra el backend y trae el desglose.
+   *
+   * ## Se dispara SOLO, sin esperar a que el cliente salga del campo
+   *
+   * Antes habia que hacer `blur` para ver el precio: el cliente escribia el
+   * codigo, no pasaba nada, y no sabia si funcionaba. Ahora un `useEffect`
+   * reacciona al codigo con un pequeño retraso.
+   *
+   * ## Por que hay un retraso (debounce)
+   *
+   * Sin el, escribir `GARY30` lanzaria 6 peticiones (una por letra) y 5 serian
+   * de codigos que no existen. Con 600 ms, solo se consulta cuando el cliente
+   * deja de teclear.
+   *
+   * ## Por que el captcha NO se consume aqui
+   *
+   * El endpoint publico devuelve que codigos existen, asi que exige captcha. Pero
+   * el token de Turnstile es de un solo uso: si se canjeara al validar, el envio
+   * del formulario se quedaria sin captcha y el registro fallaria.
+   *
+   * La solucion es un SEGUNDO widget, invisible, dedicado a la validacion. Este
+   * widget se re-renderiza con una `key` nueva cada vez que hay que validar, asi
+   * Cloudflare emite un token fresco para cada consulta y el del envio queda
+   * intacto.
+   */
+  const [couponCaptchaToken, setCouponCaptchaToken] = useState<string | null>(
+    null,
+  );
+  /** Cambia para pedir un token nuevo de la validacion. */
+  const [couponCaptchaNonce, setCouponCaptchaNonce] = useState(0);
+
+  const requestCouponValidation = useCallback(() => {
+    setCouponInfo(null);
+    setCouponError(null);
+    setCouponCaptchaToken(null);
+    setCouponCaptchaNonce((nonce) => nonce + 1);
+  }, []);
+
+  /**
+   * Consulta el desglose cuando ya hay token de la validacion.
+   *
+   * Se separa del efecto del codigo porque necesita el token, que llega
+   * asincrono del widget invisible.
+   */
+  useEffect(() => {
+    const code = draft.couponCode.trim();
+
+    if (!code || !couponCaptchaToken) return;
+
+    let cancelled = false;
+
+    setIsValidatingCoupon(true);
+
+    void validateCoupon({
+      code,
+      plan: draft.requestedPlan,
+      captchaToken: couponCaptchaToken,
+    })
+      .then((info) => {
+        if (!cancelled) setCouponInfo(info);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+
+        /*
+         * El backend distingue "no existe", "expiro" y "se agoto"; ese mensaje
+         * es el que se muestra. Un "cupon invalido" generico obligaria al
+         * cliente a adivinar si se equivoco al copiar o si ya no sirve.
+         */
+        setCouponError(
+          getErrorMessage(error, "No pudimos comprobar el cupon."),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsValidatingCoupon(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // `couponCaptchaToken` cambia cuando el widget invisible entrega un token
+    // nuevo; el codigo y el plan, cuando el cliente los cambia.
+  }, [couponCaptchaToken, draft.couponCode, draft.requestedPlan]);
+
+  /**
+   * Dispara la validacion cuando el cliente deja de teclear.
+   *
+   * 600 ms: menos se siente instantaneo pero lanza una peticion por letra; mas
+   * de un segundo el cliente cree que el campo no responde.
+   */
+  useEffect(() => {
+    const code = draft.couponCode.trim();
+
+    if (!code) {
+      setCouponInfo(null);
+      setCouponError(null);
+      setCouponCaptchaToken(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      requestCouponValidation();
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [draft.couponCode, draft.requestedPlan, requestCouponValidation]);
 
   const hasCoupon = draft.couponCode.trim().length > 0;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    /*
+     * `relative`: el widget invisible se posiciona con `absolute` para no
+     * ocupar espacio. Sin un ancestro posicionado, se escaparia al `body` y
+     * podria quedar detras de otra capa.
+     */
+    <form onSubmit={handleSubmit} className="relative space-y-4">
       <div className="mb-2">
         <h2 className="text-lg font-bold text-white">Elige tu plan</h2>
         <p className="mt-1 text-xs text-gray-400">
@@ -181,7 +316,7 @@ export function StepPlan({
         hint={
           hasCoupon
             ? "Al usar un cupon no se aplica la prueba gratuita de 7 dias."
-            : "Si tienes un codigo, escribelo antes de continuar."
+            : "Si tienes un codigo, escribelo antes de continuar. Veras al instante cuanto pagas."
         }
       >
         <input
@@ -198,6 +333,57 @@ export function StepPlan({
           className={inputClass}
         />
       </Field>
+
+      {/*
+        * Widget INVISIBLE para validar el cupon.
+        *
+        * El token de Turnstile es de un solo uso y el del widget de abajo queda
+        * reservado para el ENVIO. Este se re-monta con una `key` nueva cada vez
+        * que hay que validar, asi Cloudflare entrega un token fresco sin tocar
+        * el del formulario.
+        *
+        * `size: invisible` no exige interaccion del usuario: cuando el widget de
+        * abajo ya esta resuelto, Turnstile lo emite solo.
+        */}
+      {hasCoupon && !isSubmitting ? (
+        <TurnstileWidget
+          key={`coupon-validate-${couponCaptchaNonce}`}
+          size="invisible"
+          onToken={(token) => setCouponCaptchaToken(token || null)}
+          onExpire={() => setCouponCaptchaToken(null)}
+          onError={() =>
+            setCouponError(
+              "No pudimos comprobar el cupon. Intenta de nuevo en un momento.",
+            )
+          }
+        />
+      ) : null}
+
+      {/*
+        * Resultado de la validacion, justo bajo el campo.
+        *
+        * Va AQUI y no al final del paso: el cliente tiene que ver que paso con
+        * el codigo que acaba de escribir, sin buscarlo mas abajo.
+        */}
+      {isValidatingCoupon ? (
+        <p className="text-xs text-gray-400">Comprobando el cupon...</p>
+      ) : null}
+
+      {couponError ? (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+          {couponError}
+        </p>
+      ) : null}
+
+      {couponInfo ? (
+        <CouponSummaryCard
+          coupon={couponInfo}
+          planDisplayName={
+            plans.find((p) => p.key === draft.requestedPlan)?.displayName ??
+            couponInfo.planDisplayName
+          }
+        />
+      ) : null}
 
       <div>
         <span className={labelClass}>Verificacion de seguridad</span>

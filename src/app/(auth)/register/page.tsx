@@ -9,6 +9,8 @@ import {
   registerTenant,
   type RegisterTenantPayload,
 } from "@/lib/api/registration";
+import { persistToken } from "@/context/AuthContext";
+import { logError, logStep, logWarn } from "@/lib/registration-log";
 import { RegisterProgress } from "./RegisterProgress";
 import { StepAccount } from "./StepAccount";
 import { StepBusiness } from "./StepBusiness";
@@ -59,6 +61,15 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     setSubmitError(null);
 
+    logStep("submit del registro", {
+      paso: step,
+      slug: draft.slug,
+      plan: draft.requestedPlan,
+      cupon: draft.couponCode.trim() || "(ninguno)",
+      captcha: captchaToken ? "si" : "NO",
+      altaPrevia: pendingId ?? "(ninguna)",
+    });
+
     try {
       let currentPendingId = pendingId;
 
@@ -87,10 +98,57 @@ export default function RegisterPage() {
           couponCode: draft.couponCode.trim() || undefined,
         };
 
+        logStep("POST /tenants/register: enviando", {
+          email: payload.admin.email,
+        });
+
         const result = await registerTenant(payload);
+
+        logStep("POST /tenants/register OK", {
+          alta: result.pendingRegistrationId,
+          email: result.email,
+          provisioned: result.provisioned,
+        });
+
+        /*
+         * Cupon `free_access`: la cuenta YA existe.
+         *
+         * El backend la provisiono en el propio registro porque el cupon otorga
+         * el plan sin cobro. Abrir el checkout aqui suscribiria al cliente a
+         * algo que ya tiene, y ademas el backend lo rechaza con un 409
+         * ("Esta cuenta ya esta creada"), que es el error que se veia.
+         *
+         * Se guarda la sesion y se entra al panel con recarga completa: el proxy
+         * lee la cookie, y una navegacion de cliente no lo ejecutaria.
+         */
+        if (result.provisioned) {
+          if (result.accessToken) {
+            persistToken(result.accessToken);
+          }
+
+          if (result.slug) {
+            document.cookie = `x-org-slug=${encodeURIComponent(
+              result.slug,
+            )}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+          }
+
+          logStep("alta provisionada sin pago: entrando al panel", {
+            slug: result.slug,
+            sesion: result.accessToken ? "si" : "NO",
+          });
+
+          window.location.href = "/";
+          return;
+        }
+
         currentPendingId = result.pendingRegistrationId;
         setPendingId(currentPendingId);
       }
+
+      logStep("POST /billing/checkout/pending: iniciando", {
+        alta: currentPendingId,
+        plan: draft.requestedPlan,
+      });
 
       // La cuenta todavia NO existe: esto solo crea el preapproval de Mercado
       // Pago. Se vuelve a `/register/gracias`, que espera a que el webhook
@@ -135,6 +193,12 @@ export default function RegisterPage() {
        *
        * Ventaja adicional: cambiar de proveedor no vuelve a tocar el registro.
        */
+      logStep("POST /billing/checkout/pending OK", {
+        alta: currentPendingId,
+        providerId: checkout.providerSubscriptionId,
+        initPoint: checkout.initPoint,
+      });
+
       if (!checkout.initPoint) {
         // Sin URL de pago no hay forma de que el cliente autorice. Se trata como
         // error en vez de redirigir a un string vacio.
@@ -174,10 +238,28 @@ export default function RegisterPage() {
         pagoUrl.searchParams.set("token", tokenWs);
         pagoUrl.searchParams.set("field", "TBK_TOKEN");
         pagoUrl.searchParams.set("method", "POST");
+      } else {
+        /*
+         * Sin `token_ws` el puente navega con GET y Webpay devolveria una
+         * pagina en blanco. Es la senal de que el backend cambio el formato de
+         * `initPoint`: el dato esta en el log, no hace falta adivinarlo.
+         */
+        logWarn("initPoint SIN token_ws: el puente usara GET", {
+          initPoint: checkout.initPoint,
+        });
       }
+
+      logStep("navegando al puente /pago", {
+        url: pagoUrl.toString(),
+        metodo: tokenWs ? "POST" : "GET",
+      });
 
       window.location.href = pagoUrl.toString();
     } catch (error) {
+      logError("submit del registro FALLO", error, {
+        alta: pendingId ?? "(sin alta)",
+      });
+
       setSubmitError(
         getErrorMessage(
           error,

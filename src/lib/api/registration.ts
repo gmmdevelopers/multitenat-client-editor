@@ -36,17 +36,18 @@ export interface RegisterTenantPayload {
 /**
  * Respuesta del registro.
  *
- * ## Ya NO trae sesion ni tenant
+ * ## Normalmente NO trae sesion ni tenant
  *
  * En este punto **no existe cuenta**: el registro solo crea un alta pendiente
- * (`PendingRegistration`). El tenant y el usuario nacen cuando el webhook de
- * Mercado Pago confirma el cobro, y entonces el cliente entra por el login de
- * siempre.
+ * (`PendingRegistration`). El tenant y el usuario nacen cuando Transbank
+ * confirma la inscripcion, y entonces el cliente entra por el login de siempre.
  *
- * Antes esta interfaz describia un `accessToken` + `tenant` + `user`, que era lo
- * que devolvia el backend con el flujo viejo. Mantenerla con esa forma hacia
- * que el frontend creyera tener sesion justo despues de registrarse, cuando el
- * backend ya respondia otra cosa.
+ * ## La excepcion: cupon `free_access`
+ *
+ * Ese cupon otorga el plan sin cobro, asi que el backend provisiona el alta en
+ * el acto y devuelve `provisioned: true` con la sesion. En ese caso el frontend
+ * NO debe abrir el checkout: el backend responde 409 ("Esta cuenta ya esta
+ * creada") porque ya no hay nada que pagar.
  */
 export interface RegisterTenantResponse {
   /**
@@ -55,6 +56,12 @@ export interface RegisterTenantResponse {
    */
   pendingRegistrationId: string;
   email: string;
+  /** `true` cuando el alta ya se convirtio en cuenta (cupon `free_access`). */
+  provisioned: boolean;
+  /** Token de sesion, solo cuando `provisioned` es `true`. */
+  accessToken: string | null;
+  /** Slug del tenant creado, solo cuando `provisioned` es `true`. */
+  slug: string | null;
 }
 
 export async function registerTenant(
@@ -70,6 +77,51 @@ export async function registerTenant(
 export interface BusinessTypeOption {
   value: string;
   label: string;
+}
+
+/**
+ * Desglose de un cupón, tal como lo devuelve el backend.
+ *
+ * `summary` viene generada por el servidor: la misma frase se usa en la
+ * pantalla de registro y en el banner del panel, así no se desincronizan.
+ */
+export interface CouponDescription {
+  valid: true;
+  code: string;
+  type: "discount" | "free_trial" | "free_access";
+  plan: string;
+  planDisplayName: string;
+  planAmount: number;
+  /** Lo que paga hoy al suscribirse. `0` en `free_trial` y `free_access`. */
+  firstPayment: number;
+  /** Lo que se cobra cada mes mientras dura la promoción. */
+  recurringAmount: number;
+  /** Lo que se cobrará al terminar la promoción. `null` = el monto es definitivo. */
+  fullPriceAfter: number | null;
+  durationMonths: number | null;
+  promoEndsAt: string | null;
+  grantsPlan: string | null;
+  percentOff: number | null;
+  freeTrialMonths: number | null;
+  summary: string;
+}
+
+/**
+ * Valida un cupón y devuelve su desglose.
+ *
+ * Requiere el token de Turnstile: el endpoint es público y devolvería qué
+ * códigos existen, así que cada intento cuesta un captcha resuelto.
+ */
+export async function validateCoupon(input: {
+  code: string;
+  plan: string;
+  captchaToken: string;
+}): Promise<CouponDescription> {
+  const { data } = await api.post<CouponDescription>(
+    "/tenants/coupons/validate",
+    input,
+  );
+  return data;
 }
 
 /**
@@ -188,22 +240,4 @@ export async function getPendingRegistrationStatus(
   return data;
 }
 
-/**
- * Intenta confirmar el pago por adelantado, sin esperar al webhook.
- *
- * Mercado Pago avisa al backend por webhook, pero puede tardar. Mientras el
- * cliente mira la pantalla de «gracias» se le pide al backend que consulte el
- * pago directamente (con los datos del preapproval) y, si ya esta aprobado,
- * cree la cuenta en ese momento.
- *
- * Es idempotente: si el webhook llego primero, responde lo mismo sin duplicar
- * nada. Por eso la pantalla puede llamarlo cada pocos segundos sin miedo.
- */
-export async function syncPendingRegistration(
-  pendingRegistrationId: string,
-): Promise<PendingRegistrationStatus> {
-  const { data } = await api.post<PendingRegistrationStatus>(
-    `/tenants/register/${pendingRegistrationId}/sync`,
-  );
-  return data;
-}
+

@@ -22,6 +22,8 @@ interface TurnstileWindow extends Window {
         "expired-callback"?: () => void;
         "error-callback"?: () => void;
         theme?: "light" | "dark" | "auto";
+        /** `invisible` no muestra nada y no exige clic. */
+        size?: "normal" | "compact" | "flexible" | "invisible";
       },
     ) => string;
     reset: (widgetId?: string) => void;
@@ -32,6 +34,13 @@ interface TurnstileWidgetProps {
   onToken: (token: string) => void;
   onExpire?: () => void;
   onError?: () => void;
+  /**
+   * `invisible` renderea el widget sin mostrarlo y sin exigir clic.
+   *
+   * Se usa para validaciones puntuales (validar un cupon) que necesitan su
+   * propio token sin gastar el del formulario, que es de un solo uso.
+   */
+  size?: "normal" | "compact" | "flexible" | "invisible";
 }
 
 let scriptPromise: Promise<void> | null = null;
@@ -76,6 +85,7 @@ export function TurnstileWidget({
   onToken,
   onExpire,
   onError,
+  size = "normal",
 }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -117,6 +127,7 @@ export function TurnstileWidget({
         widgetIdRef.current = turnstile.render(containerRef.current, {
           sitekey: siteKey,
           theme: "dark",
+          size,
           callback: handleToken,
           "expired-callback": () => {
             // El token caduca (~5 min). Se limpia para que el formulario no se
@@ -140,9 +151,16 @@ export function TurnstileWidget({
     return () => {
       cancelled = true;
     };
-  }, [siteKey, handleToken, handleExpire, handleError]);
+  }, [siteKey, size, handleToken, handleExpire, handleError]);
 
   if (!siteKey) {
+    /*
+     * Un widget invisible sin site key no debe romper el formulario: se muestra
+     * el aviso solo en el visible, que es el que el cliente resuelve. Sin site
+     * key, la validacion del cupon simplemente no puede ocurrir.
+     */
+    if (size === "invisible") return null;
+
     return (
       <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-[11px] text-amber-300">
         Falta configurar{" "}
@@ -150,6 +168,31 @@ export function TurnstileWidget({
         puede verificar que seas una persona, asi que no es posible completar el
         registro.
       </div>
+    );
+  }
+
+  /*
+   * Widget INVISIBLE: contenedor de tamaño cero.
+   *
+   * Turnstile, con `size: "invisible"`, igual renderiza un `div` dentro de
+   * nuestro contenedor. Ese div ocupa alto y deja un hueco visible entre los
+   * campos del formulario, aunque no se vea el widget.
+   *
+   * Se colapsa el contenedor a 0x0 con `overflow-hidden` y se saca del flujo con
+   * `absolute`: asi no reserva espacio ni empuja nada, pero el script de
+   * Cloudflare sigue teniendo un nodo donde montarse.
+   *
+   * `aria-hidden` porque no hay nada que anunciar al lector de pantalla: el
+   * widget visible es el que el usuario resuelve.
+   */
+  if (size === "invisible") {
+    return (
+      <div
+        ref={containerRef}
+        aria-hidden
+        data-testid="turnstile-widget-invisible"
+        className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
+      />
     );
   }
 
